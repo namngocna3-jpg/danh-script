@@ -180,8 +180,8 @@ export async function runGateChat(
         const genreSkill = readSkillOptional(`genres/${genre}.md`)
         if (genreSkill) layerParts.push(genreSkill)
       }
-    } catch {
-      /* params_json hỏng → bỏ qua genre */
+    } catch (e) {
+      console.warn('[danh-script] runGateChat: params_json hỏng, bỏ qua genre', e)
     }
   }
 

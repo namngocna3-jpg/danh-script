@@ -153,8 +153,8 @@ export async function runGate(
         const genreSkill = readSkillOptional(`genres/${genre}.md`)
         if (genreSkill) layerParts.push(genreSkill)
       }
-    } catch {
-      /* params_json hỏng → bỏ qua genre, không chặn cổng */
+    } catch (e) {
+      console.warn('[danh-script] runGate: params_json hỏng, bỏ qua genre', e)
     }
   }
 
@@ -253,8 +253,8 @@ function outputIntentHeader(projectId: number): string {
       const v = ideal.brief?.output_intent?.trim()
       if (v) return `Ý đồ đầu ra: ${v}\n\n`
     }
-  } catch {
-    /* ideal_json hỏng → bỏ header */
+  } catch (e) {
+    console.warn('[danh-script] outputIntentHeader: ideal_json hỏng, bỏ header', e)
   }
   return ''
 }
