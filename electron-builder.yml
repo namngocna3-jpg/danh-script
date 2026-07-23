@@ -1,0 +1,24 @@
+appId: com.danhscript.app
+productName: Danh Script
+directories:
+  buildResources: build
+  output: dist
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!docs/*'
+  - '!electron.vite.config.ts'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+asarUnpack:
+  - '**/*.node'
+extraResources:
+  - from: src/main/db/schema.sql
+    to: schema.sql
+  - from: skills
+    to: skills
+win:
+  target:
+    - nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

@@ -1,0 +1,40 @@
+{
+  "name": "danh-script",
+  "version": "0.1.0",
+  "description": "Danh Script — xưởng viết kịch bản & prompt tiền kỳ video (dừng trước render)",
+  "author": "Phạm Thành Danh",
+  "main": "./out/main/index.js",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "postinstall": "electron-builder install-app-deps",
+    "dist": "electron-vite build && electron-builder --win"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "react-markdown": "^9.1.0",
+    "remark-gfm": "^4.0.1",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.13.1",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "electron": "^34.1.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^3.0.0",
+    "postcss": "^8.5.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0"
+  }
+}
