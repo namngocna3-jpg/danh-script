@@ -269,8 +269,33 @@ export interface ReviewResult {
   report: string
 }
 
+/**
+ * Dòng "Ý đồ đầu ra" prepend vào snapshot MỌI gate sau gate0 — cho reviewer áp
+ * được luật phạt CTA 2 chiều (reviewGate không có read tool, chỉ thấy snapshot).
+ * Không có output_intent → trả '' (reviewer rơi về mặc định kể chuyện).
+ */
+function outputIntentHeader(projectId: number): string {
+  try {
+    const project = getProject(projectId)
+    if (project?.ideal_json) {
+      const ideal = JSON.parse(project.ideal_json) as { brief?: { output_intent?: string } }
+      const v = ideal.brief?.output_intent?.trim()
+      if (v) return `Ý đồ đầu ra: ${v}\n\n`
+    }
+  } catch {
+    /* ideal_json hỏng → bỏ header */
+  }
+  return ''
+}
+
 /** Gom sản phẩm của 1 cổng thành text để reviewer chấm. */
 function snapshotForGate(projectId: number, gateStage: string): string {
+  // gate0 tự chứa output_intent trong Ý đồ chốt; các gate sau prepend header dùng chung.
+  const body = snapshotBody(projectId, gateStage)
+  return gateStage === 'gate0_ideal' ? body : outputIntentHeader(projectId) + body
+}
+
+function snapshotBody(projectId: number, gateStage: string): string {
   const scenes = listScenes(projectId)
   if (gateStage === 'gate0_ideal') {
     // GATE 0 (mới) = "Ý đồ chốt" trong ideal.brief, KHÔNG phải danh sách cảnh.
