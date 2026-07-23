@@ -16,6 +16,7 @@ import {
   statSync
 } from 'fs'
 import { join, dirname } from 'path'
+import { getProject } from '../db'
 
 /** Thư mục skills SỬA ĐƯỢC (trong userData). Ưu tiên số 1 khi đọc. */
 function userSkillsDir(): string {
@@ -139,6 +140,30 @@ export function loadStyleAnchor(styleId?: string | null): string {
 export function injectStyleAnchor(system: string, styleId?: string | null): string {
   if (!system.includes('{{STYLE_ANCHOR}}')) return system
   return system.replaceAll('{{STYLE_ANCHOR}}', loadStyleAnchor(styleId).trim())
+}
+
+/**
+ * Thay {{OUTPUT_INTENT}} bằng luật nền (output-intent.md) + mô tả ý đồ đầu ra của dự án.
+ * - Không có placeholder → trả nguyên (giống injectStyleAnchor).
+ * - Không đọc được output_intent → giữ mặc định (kể chuyện, không CTA) → an toàn mọi ideal.
+ * Gọi cạnh injectStyleAnchor trong runGate/runGateChat/runGate0.
+ */
+export function injectOutputIntent(system: string, projectId: number): string {
+  if (!system.includes('{{OUTPUT_INTENT}}')) return system
+  const base = readSkillOptional('output-intent.md').trim()
+  let intent = '(chưa xác định — dùng mặc định kể chuyện, không CTA)'
+  try {
+    const project = getProject(projectId)
+    if (project?.ideal_json) {
+      const ideal = JSON.parse(project.ideal_json) as { brief?: { output_intent?: string } }
+      const v = ideal.brief?.output_intent?.trim()
+      if (v) intent = v
+    }
+  } catch {
+    /* ideal_json hỏng → giữ mặc định */
+  }
+  const block = base ? `${base}\n${intent}` : intent
+  return system.replaceAll('{{OUTPUT_INTENT}}', block)
 }
 
 /** Liệt kê các style có sẵn (đọc frontmatter name/label) cho wizard chọn. */
