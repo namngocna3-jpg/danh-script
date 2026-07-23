@@ -15,6 +15,13 @@ import type {
   AssetRole,
   DeriveKind
 } from '../../shared/types'
+import {
+  assertSkeleton,
+  assertDirectorPlan,
+  assertVideoPrompt,
+  assertPlanShots,
+  assertImagePrompt
+} from './validators'
 
 /** Ngữ cảnh chạy tool: buộc trong 1 dự án. */
 export interface ToolContext {
@@ -242,6 +249,7 @@ const planShots: ToolDef = {
     }
   },
   handler: (input, ctx) => {
+    assertPlanShots(input)
     const sceneOrder = input.scene_order as number
     const shots = (input.shots as Array<{ block_order: number; shot_desc: string }>) ?? []
     const ids: number[] = []
@@ -308,6 +316,7 @@ const writeSkeleton: ToolDef = {
     }
   },
   handler: (input, ctx) => {
+    assertSkeleton(input)
     const skeleton: StorySkeleton = {
       logline: input.logline as string,
       beats: (input.beats as StorySkeleton['beats']) ?? [],
@@ -467,6 +476,7 @@ const writeImagePrompt: ToolDef = {
     }
   },
   handler: (input, ctx) => {
+    assertImagePrompt(input)
     const id = db.upsertBlock(
       ctx.projectId,
       input.scene_order as number,
@@ -512,6 +522,7 @@ const writeVideoPrompt: ToolDef = {
     }
   },
   handler: (input, ctx) => {
+    assertVideoPrompt(input)
     const tagNames = (input.tags as string[]) ?? []
     const vp: VideoPrompt = {
       style: input.style as string,
@@ -622,6 +633,7 @@ const writeDirectorPlan: ToolDef = {
     }
   },
   handler: (input, ctx) => {
+    assertDirectorPlan(input)
     const plan: DirectorPlan = {
       scenes: (input.scenes as DirectorPlan['scenes']) ?? [],
       overall_note: input.overall_note as string | undefined
