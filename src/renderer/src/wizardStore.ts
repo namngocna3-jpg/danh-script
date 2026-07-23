@@ -110,7 +110,7 @@ interface WizardState {
   buildExport: (projectId: number) => Promise<void>
   loadChat: (projectId: number, stage: ChatGateStage) => Promise<void>
   sendChat: (projectId: number, stage: ChatGateStage, message: string | null) => Promise<void>
-  confirmGate: (projectId: number, stage: ChatGateStage) => Promise<boolean>
+  confirmGate: (projectId: number, stage: ChatGateStage, force?: boolean) => Promise<boolean>
   loadAuto: (projectId: number) => Promise<void>
   sendAuto: (projectId: number, message: string | null) => Promise<void>
   loadPlan: (projectId: number) => Promise<void>
@@ -349,8 +349,8 @@ export const useWizard = create<WizardState>((set, get) => ({
     }
   },
 
-  async confirmGate(projectId, stage) {
-    const res = await window.danh.gate.confirm(projectId, stage)
+  async confirmGate(projectId, stage, force) {
+    const res = await window.danh.gate.confirm(projectId, stage, force)
     if (res.ok) {
       set({ wizardError: null })
       return true

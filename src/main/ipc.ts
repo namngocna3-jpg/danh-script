@@ -155,14 +155,17 @@ export function registerIpc(): void {
   })
 
   // ---- Chốt cổng: cập nhật stage (người dùng bấm "Chốt & sang cổng sau") ----
-  ipcMain.handle('gate:confirm', async (_e, projectId: number, gateStage: string) => {
-    try {
-      confirmGate(projectId, gateStage)
-      return ok(true)
-    } catch (err) {
-      return fail(err)
+  ipcMain.handle(
+    'gate:confirm',
+    async (_e, projectId: number, gateStage: string, force?: boolean) => {
+      try {
+        confirmGate(projectId, gateStage, force ?? false)
+        return ok(true)
+      } catch (err) {
+        return fail(err)
+      }
     }
-  })
+  )
 
   // ---- Đọc khung xương + chiến lược chuyển thể (GATE 1) để hiển thị ----
   ipcMain.handle('gate:plan', async (_e, projectId: number) => {

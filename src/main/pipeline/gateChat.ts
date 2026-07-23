@@ -22,7 +22,8 @@ import {
   coverageReport,
   assetCoverage,
   listScenes,
-  listBlocks
+  listBlocks,
+  latestReviews
 } from '../db'
 
 /** Đặc tả 1 cổng hội thoại. */
@@ -268,8 +269,28 @@ export function gateChatHistory(projectId: number, gateStage: string): ChatTurn[
  * ⭐ Với gate ảnh/video: chặn nếu còn block trống (cảnh chưa có block, hoặc block thiếu ảnh/video)
  * — đây là lá chắn chống lỗi "(trống — chưa dựng)".
  */
-export function confirmGate(projectId: number, gateStage: string): void {
+export function confirmGate(projectId: number, gateStage: string, force = false): void {
   if (!isChatGate(gateStage)) throw new Error(`Cổng không hợp lệ: ${gateStage}`)
+
+  // ⭐ Chặn theo điểm review mới nhất của cổng (CHỈ CHẶN, không tự sửa).
+  //   D → luôn chặn.  C → chặn trừ khi force.  A/B/?/không-review → qua.
+  const review = latestReviews(projectId).find((r) => r.gate_stage === gateStage)
+  if (review) {
+    const grade = (review.grade || '').toUpperCase()
+    const gist = (review.report || '').split('\n').slice(0, 3).join(' ').slice(0, 300)
+    if (grade === 'D') {
+      throw new Error(
+        `Cổng "${gateStage}" đang bị chấm D — chưa thể chốt.\nLý do (tóm): ${gist}\n` +
+          `Hãy nhắn agent sửa theo báo cáo rồi CHẤM LẠI trước khi chốt.`
+      )
+    }
+    if (grade === 'C' && !force) {
+      throw new Error(
+        `Cổng "${gateStage}" đang bị chấm C (chưa đạt tối ưu).\nLý do (tóm): ${gist}\n` +
+          `Có thể chốt nếu bạn chấp nhận — bấm lại nút "Chốt dù điểm C".`
+      )
+    }
+  }
 
   // ⭐ Cổng NGUYÊN LIỆU: chặn chốt nếu còn asset thiếu prompt sinh ảnh.
   if (gateStage === 'gate_assets') {

@@ -79,7 +79,11 @@ export interface DanhScriptApi {
       message: string | null
     ) => Promise<IpcResult<GateChatReply>>
     chatHistory: (projectId: number, gateStage: string) => Promise<IpcResult<ChatTurn[]>>
-    confirm: (projectId: number, gateStage: string) => Promise<IpcResult<boolean>>
+    confirm: (
+      projectId: number,
+      gateStage: string,
+      force?: boolean
+    ) => Promise<IpcResult<boolean>>
     plan: (projectId: number) => Promise<IpcResult<PlanArtifacts>>
     onStep: (cb: (step: AgentStep) => void) => () => void
   }
@@ -160,7 +164,8 @@ const api: DanhScriptApi = {
       ipcRenderer.invoke('gate:chat', projectId, gateStage, message),
     chatHistory: (projectId, gateStage) =>
       ipcRenderer.invoke('gate:chatHistory', projectId, gateStage),
-    confirm: (projectId, gateStage) => ipcRenderer.invoke('gate:confirm', projectId, gateStage),
+    confirm: (projectId, gateStage, force) =>
+      ipcRenderer.invoke('gate:confirm', projectId, gateStage, force),
     plan: (projectId) => ipcRenderer.invoke('gate:plan', projectId),
     onStep: (cb) => {
       const listener = (_e: unknown, step: AgentStep): void => cb(step)

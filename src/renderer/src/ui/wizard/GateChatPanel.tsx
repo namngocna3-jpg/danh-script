@@ -170,6 +170,15 @@ export function GateChatPanel({
         >
           {reviewing === gateId ? 'Đang chấm…' : 'Kiểm duyệt A/B/C/D'}
         </button>
+        {wizardError?.includes('điểm C') && (
+          <button
+            className="btn-ghost text-xs text-amber-400 disabled:opacity-50"
+            disabled={anyBusy}
+            onClick={() => void confirmGate(projectId, stage, true).then((okr) => okr && onDone())}
+          >
+            Chốt dù điểm C
+          </button>
+        )}
         <button
           className="btn-primary ml-auto text-xs disabled:cursor-not-allowed disabled:opacity-50"
           disabled={anyBusy}
