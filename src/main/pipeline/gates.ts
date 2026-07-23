@@ -14,6 +14,7 @@ import {
   injectOutputIntent
 } from '../core/skillLoader'
 import { toolsFor } from '../tools'
+import { workerSpec } from './workerSpecs'
 import { chat } from '../core/llmGateway'
 import { llmQueue } from '../core/queue'
 import {
@@ -78,9 +79,9 @@ const GATES: Record<string, GateSpec> = {
   // ── QUY HOẠCH ĐẠO DIỄN (director_plan) ──
   directorPlanner: {
     worker: 'directorPlanner',
-    tools: ['read_ideal', 'read_scenes', 'read_plan', 'read_script_full', 'write_director_plan'],
+    tools: [...workerSpec('directorPlanner').tools, 'read_plan'],
     stage: 'gate_director',
-    layers: ['storyboard-craft.md'],
+    layers: workerSpec('directorPlanner').layers,
     buildPrompt: () =>
       `BƯỚC 1 BẮT BUỘC: gọi read_script_full + read_scenes để đọc TOÀN VĂN narration + bối cảnh từng cảnh. ` +
       `Rồi PHÂN TÍCH đạo diễn (không sáng tạo nội dung mới): với MỖI cảnh — đếm số câu thoại (line_count), ` +
@@ -90,24 +91,9 @@ const GATES: Record<string, GateSpec> = {
   // ── NGUYÊN LIỆU (Visual System) ──
   assetDeriver: {
     worker: 'assetDeriver',
-    tools: [
-      'read_ideal',
-      'read_scenes',
-      'read_assets',
-      'read_script_full',
-      'read_asset_coverage',
-      'derive_assets',
-      'write_asset_prompt',
-      'save_derived_asset',
-      'write_visual_system'
-    ],
+    tools: workerSpec('assetDeriver').tools,
     stage: 'gate_assets',
-    layers: [
-      'asset-prompt-craft.md',
-      'visual-system.md',
-      'identity-lock.md',
-      'style-constitution.md'
-    ],
+    layers: workerSpec('assetDeriver').layers,
     buildPrompt: () =>
       `BƯỚC 1 BẮT BUỘC: gọi read_script_full + read_scenes + read_assets để đọc TOÀN VĂN kịch bản + bối cảnh + @tag đã có. ` +
       `Rồi TÁCH nguyên liệu TỪ kịch bản (không bịa): ① derive_assets (nhân vật/bối cảnh/đạo cụ lặp lại) ` +
@@ -117,16 +103,9 @@ const GATES: Record<string, GateSpec> = {
   },
   imgPrompter: {
     worker: 'imgPrompter',
-    tools: ['read_ideal', 'read_scenes', 'read_blocks', 'read_assets', 'read_coverage', 'save_asset', 'write_image_prompt'],
+    tools: workerSpec('imgPrompter').tools,
     stage: 'gate2_image',
-    layers: [
-      'style-constitution.md',
-      'identity-lock.md',
-      'craft-photography.md',
-      'byteplus-spec.md',
-      'consistency.md',
-      'moderation-softening.md'
-    ],
+    layers: workerSpec('imgPrompter').layers,
     buildPrompt: () =>
       `BƯỚC 1 BẮT BUỘC: gọi read_ideal + read_scenes + read_blocks + read_assets để đọc TOÀN VĂN ideal + bối cảnh + shot đã quy hoạch + @tag. ` +
       `Rồi dựng prompt ẢNH khung đầu (tiếng Anh, 3 đoạn, nhúng @tag) cho mỗi block của mỗi cảnh. ` +
@@ -134,17 +113,9 @@ const GATES: Record<string, GateSpec> = {
   },
   vidPrompter: {
     worker: 'vidPrompter',
-    tools: ['read_ideal', 'read_scenes', 'read_blocks', 'read_assets', 'read_coverage', 'write_video_prompt'],
+    tools: workerSpec('vidPrompter').tools,
     stage: 'gate3_video',
-    layers: [
-      'style-constitution.md',
-      'craft-photography.md',
-      'motion-library.md',
-      'byteplus-spec.md',
-      'model-catalog.md',
-      'consistency.md',
-      'moderation-softening.md'
-    ],
+    layers: workerSpec('vidPrompter').layers,
     buildPrompt: () =>
       `BƯỚC 1 BẮT BUỘC: gọi read_ideal + read_scenes + read_blocks + read_assets để đọc TOÀN VĂN ideal + block đã có prompt ảnh + @tag. ` +
       `Rồi dựng prompt VIDEO (STYLE/SCENE/MOTION/AUDIO/CONSTRAINTS + NEGATIVE dự phòng + TEXT_OVERLAY nếu cần chữ, target BytePlus/Seedance) cho mỗi block đã có prompt ảnh. ` +

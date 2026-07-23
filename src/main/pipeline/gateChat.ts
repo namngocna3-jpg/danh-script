@@ -12,6 +12,7 @@ import {
   injectOutputIntent
 } from '../core/skillLoader'
 import { toolsFor } from '../tools'
+import { workerSpec } from './workerSpecs'
 import {
   getProject,
   loadGateChat,
@@ -93,7 +94,7 @@ const CHAT_GATES: Record<string, ChatGateSpec> = {
   gate_director: {
     worker: 'directorPlanner',
     tools: [...READ_TOOLS, 'read_script_full', 'write_director_plan'],
-    layers: ['storyboard-craft.md'],
+    layers: workerSpec('directorPlanner').layers,
     kickoff:
       'Người dùng vừa mở cổng QUY HOẠCH ĐẠO DIỄN. Hãy chào ngắn, đọc toàn bộ narration final (read_script_full), ' +
       'rồi PHÂN TÍCH (không sáng tạo nội dung mới): với MỖI cảnh — đếm số câu thoại (line_count), đếm số chữ (char_count, ~4 chữ/giây để ước thời lượng), ' +
@@ -112,12 +113,7 @@ const CHAT_GATES: Record<string, ChatGateSpec> = {
       'save_derived_asset',
       'write_visual_system'
     ],
-    layers: [
-      'asset-prompt-craft.md',
-      'visual-system.md',
-      'identity-lock.md',
-      'style-constitution.md'
-    ],
+    layers: workerSpec('assetDeriver').layers,
     kickoff:
       'Người dùng vừa mở cổng NGUYÊN LIỆU. Hãy chào ngắn, đọc toàn bộ kịch bản (read_script_full) + cảnh + @tag đã có (read_assets). ' +
       'Làm TUẦN TỰ:\n' +
@@ -130,14 +126,7 @@ const CHAT_GATES: Record<string, ChatGateSpec> = {
   gate2_image: {
     worker: 'imgPrompter',
     tools: [...READ_TOOLS, 'read_coverage', 'save_asset', 'write_image_prompt'],
-    layers: [
-      'style-constitution.md',
-      'identity-lock.md',
-      'craft-photography.md',
-      'byteplus-spec.md',
-      'consistency.md',
-      'moderation-softening.md'
-    ],
+    layers: workerSpec('imgPrompter').layers,
     kickoff:
       'Người dùng vừa mở cổng PROMPT ẢNH. Hãy chào ngắn, đọc ideal + cảnh + shot đã quy hoạch (read_blocks) + @tag (read_assets), ' +
       'rồi dựng prompt ảnh khung đầu (tiếng Anh, 3 đoạn, nhúng @tag) cho MỖI block đã có shot_desc. ' +
@@ -146,15 +135,7 @@ const CHAT_GATES: Record<string, ChatGateSpec> = {
   gate3_video: {
     worker: 'vidPrompter',
     tools: [...READ_TOOLS, 'read_coverage', 'write_video_prompt'],
-    layers: [
-      'style-constitution.md',
-      'craft-photography.md',
-      'motion-library.md',
-      'byteplus-spec.md',
-      'model-catalog.md',
-      'consistency.md',
-      'moderation-softening.md'
-    ],
+    layers: workerSpec('vidPrompter').layers,
     kickoff:
       'Người dùng vừa mở cổng PROMPT VIDEO. Hãy chào ngắn, đọc ideal + block đã có prompt ảnh (read_blocks) + @tag (read_assets), rồi ' +
       'dựng prompt video (STYLE/SCENE/MOTION/AUDIO/CONSTRAINTS + TEXT_OVERLAY nếu cần) cho MỖI block. ' +
