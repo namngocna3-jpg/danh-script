@@ -1,6 +1,6 @@
 # LỚP NỀN · Ý đồ đầu ra (đảo mặc định CTA) ⭐
 
-> Luật này áp cho MỌI thợ khi prompt có chèn `{{OUTPUT_INTENT}}`. Đây là "công tắc gốc" quyết định video có mang chất bán hàng hay không — đọc kỹ trước khi dựng nhịp kết / chữ overlay / điểm chạm sản phẩm.
+> Luật này là "công tắc gốc" quyết định video có mang chất bán hàng hay không — đọc kỹ trước khi dựng nhịp kết / chữ overlay / điểm chạm sản phẩm.
 
 ## Luật gốc — MẶC ĐỊNH KHÔNG BÁN HÀNG
 
