@@ -13,13 +13,16 @@ import {
 } from '../core/skillLoader'
 import { toolsFor } from '../tools'
 import { workerSpec } from './workerSpecs'
+import { extractTags, checkTagsExist } from './tagGuard'
 import {
   getProject,
   loadGateChat,
   saveGateChat,
   updateProjectStage,
   coverageReport,
-  assetCoverage
+  assetCoverage,
+  listScenes,
+  listBlocks
 } from '../db'
 
 /** Đặc tả 1 cổng hội thoại. */
@@ -299,6 +302,24 @@ export function confirmGate(projectId: number, gateStage: string): void {
       const label = need === 'image' ? 'ảnh' : 'video'
       const list = missing.map((g) => `${g.scene_order}.${g.block_order}`).join(', ')
       problems.push(`Block chưa có prompt ${label}: ${list}`)
+    }
+    // ⭐ Cờ mềm @tag: liệt kê @tag nhúng trong prompt mà KHÔNG có asset (gõ sai / mồ côi).
+    // Chỉ CẢNH BÁO qua console — không cứng chặn (tránh false-positive cảnh không người).
+    const orphanTags = new Set<string>()
+    for (const s of listScenes(projectId)) {
+      for (const b of listBlocks(s.id)) {
+        const text =
+          need === 'image' ? (b.image_prompt_en ?? '') : (b.video_prompt_json ?? '')
+        const tags = extractTags(text)
+        if (tags.length) {
+          for (const m of checkTagsExist(projectId, tags).missing) orphanTags.add(m)
+        }
+      }
+    }
+    if (orphanTags.size) {
+      console.warn(
+        `[danh-script] confirmGate ${gateStage}: @tag mồ côi (không có asset): ${[...orphanTags].join(', ')}`
+      )
     }
     if (problems.length) {
       throw new Error(
