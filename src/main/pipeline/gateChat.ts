@@ -8,7 +8,8 @@ import {
   loadExecutionSkill,
   readSkillOptional,
   composeSystem,
-  injectStyleAnchor
+  injectStyleAnchor,
+  injectOutputIntent
 } from '../core/skillLoader'
 import { toolsFor } from '../tools'
 import {
@@ -205,13 +206,16 @@ export async function runGateChat(
 
   // Lớp giao thức hội thoại luôn nằm cuối để "đè" cách hành xử.
   const chatProtocol = readSkillOptional('free/_chat_protocol.md')
-  const system = injectStyleAnchor(
-    composeSystem(
-      loadExecutionSkill(project.pipeline, spec.worker),
-      ...layerParts,
-      chatProtocol
+  const system = injectOutputIntent(
+    injectStyleAnchor(
+      composeSystem(
+        loadExecutionSkill(project.pipeline, spec.worker),
+        ...layerParts,
+        chatProtocol
+      ),
+      project.style_id
     ),
-    project.style_id
+    projectId
   )
 
   const history = loadGateChat(projectId, gateStage) as Array<{ role: string; content: unknown }>

@@ -5,7 +5,7 @@
 // ghi vào ideal.brief qua write_ideal_brief. KHÔNG tạo scene/@tag ở bước này.
 // ============================================================
 import { runAgent, type AgentStep } from '../core/agentRunner'
-import { loadExecutionSkill, readSkill, composeSystem } from '../core/skillLoader'
+import { loadExecutionSkill, readSkill, composeSystem, injectOutputIntent } from '../core/skillLoader'
 import { toolsFor } from '../tools'
 import { getProject, updateProjectStage } from '../db'
 import type { Ideal, IdealBrief } from '../../shared/types'
@@ -28,7 +28,10 @@ export async function runGate0(
   if (!project) throw new Error('Không tìm thấy dự án')
 
   // Linh hồn: skill thợ ideaAnalyst (đã tự chứa khung 7 phần — làm rõ ý đồ).
-  const system = composeSystem(loadExecutionSkill(project.pipeline, 'ideaAnalyst'))
+  const system = injectOutputIntent(
+    composeSystem(loadExecutionSkill(project.pipeline, 'ideaAnalyst')),
+    projectId
+  )
 
   const ideal = JSON.parse(project.ideal_json) as Ideal
   const userPrompt =

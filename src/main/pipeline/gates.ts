@@ -10,7 +10,8 @@ import {
   readSkill,
   readSkillOptional,
   composeSystem,
-  injectStyleAnchor
+  injectStyleAnchor,
+  injectOutputIntent
 } from '../core/skillLoader'
 import { toolsFor } from '../tools'
 import { chat } from '../core/llmGateway'
@@ -186,9 +187,12 @@ export async function runGate(
     }
   }
 
-  const system = injectStyleAnchor(
-    composeSystem(loadExecutionSkill(project.pipeline, spec.worker), ...layerParts),
-    project.style_id
+  const system = injectOutputIntent(
+    injectStyleAnchor(
+      composeSystem(loadExecutionSkill(project.pipeline, spec.worker), ...layerParts),
+      project.style_id
+    ),
+    projectId
   )
 
   const ideal = JSON.parse(project.ideal_json) as { raw: string }
