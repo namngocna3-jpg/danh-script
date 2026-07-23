@@ -22,13 +22,19 @@ Chấm theo 3 lớp, xét lần lượt:
 ## ⭐ PHANH ĐỘ ĐẦY ĐỦ KHUNG OUTPUT (ép độ sâu)
 Mỗi thợ có "Khung output bắt buộc" trong skill. **Nếu bỏ TRỐNG một mục bắt buộc của template → tối đa hạng C** (dù các mục khác tốt). Đây là phanh chống output nông. Mục bắt buộc theo gate:
 - **gate0_ideal**: thông điệp lõi · đối tượng · góc cảm xúc · mood · thể loại · độ dài.
-- **gate1a_draft**: mạch tổng · cảm xúc trục · các nhịp · (điểm chạm SP nếu bán hàng).
+- **gate1a_draft**: mạch tổng · cảm xúc trục · các nhịp · (điểm chạm SP CHỈ khi ý đồ đầu ra thương mại; kể chuyện thuần mà có điểm chạm SP = lỗi, xem luật phạt CTA).
 - **gate1b_skeleton**: logline · mâu thuẫn nền · đường cong cảm xúc · các nhịp (có vai trò) · cao trào · payoff.
 - **gate1c_adaptation**: approach · tông · bảng "cho xem đừng kể" · motif · cạm bẫy.
 - **gate1d_script / gate1_script**: mỗi cảnh có bối cảnh + narration + ≥1 shot.
 - **gate_director**: mỗi cảnh có đếm thoại + chấm cảm xúc 0–10 + (chuyển cảnh nơi cần).
 - **gate_assets**: mỗi asset gốc có prompt + Color Script có mốc màu.
 - **gate2_image / gate3_video**: mỗi block đã quy hoạch có prompt.
+
+## ⭐ PHANH Ý ĐỒ ĐẦU RA (phạt CTA sai hướng — 2 CHIỀU)
+Đọc **Ý đồ đầu ra** trong Ý đồ chốt (GATE 0) để chấm. CTA/chào hàng/điểm chạm sản phẩm/chữ giá·link phải KHỚP ý đồ — phạt CẢ HAI chiều:
+- **Chiều 1 (thừa CTA):** ý đồ đầu ra là **kể chuyện thuần** mà kịch bản/prompt lại chèn CTA · lời chào hàng · điểm chạm sản phẩm ép buộc · text_overlay giá/link · nhịp kết chốt bán → **lỗi 🟡, hạ hạng** (nhịp kết phải là payoff cảm xúc).
+- **Chiều 2 (thiếu CTA):** ý đồ đầu ra là **thương mại** (affiliate/TVC/bán) mà nhịp kết KHÔNG có điểm chạm sản phẩm / không dẫn hành động ở mức ý đồ yêu cầu → **lỗi 🟡, hạ hạng** (thiếu chức năng thương mại đã chốt).
+- Không có Ý đồ đầu ra rõ → theo MẶC ĐỊNH kể chuyện: coi việc chèn CTA vô cớ là lỗi chiều 1.
 
 ## RED-LINE 2 lớp — vi phạm bất kỳ = lỗi 🔴 NGHIÊM TRỌNG
 

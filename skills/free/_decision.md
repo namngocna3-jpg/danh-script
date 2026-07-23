@@ -33,7 +33,7 @@ assets   assetDeriver   → ⭐NGUYÊN LIỆU: tách nhân vật/bối cảnh/đ
    ▼ (người dùng copy prompt → Coco tạo ảnh → upload ảnh về)
 GATE 2   imgPrompter    → prompt ẢNH khung đầu (tiếng Anh) mỗi block, nhúng @tag nguyên liệu đã có
    ▼
-GATE 3   vidPrompter    → prompt VIDEO mỗi block: STYLE/SCENE/MOTION/AUDIO/CONSTRAINTS + chữ CTA (target BytePlus)
+GATE 3   vidPrompter    → prompt VIDEO mỗi block: STYLE/SCENE/MOTION/AUDIO/CONSTRAINTS + chữ CTA *nếu ý đồ thương mại* (target BytePlus)
    ▼
 GATE 4   export         → bảng copy prompt + nguyên liệu + bảng @tag→ảnh cho người dùng mang đi render
 ```
