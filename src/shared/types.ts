@@ -69,6 +69,10 @@ export interface IdealBrief {
   mood?: string // tông/mood tổng thể của video (VD: ấm áp hoài niệm, gấp gáp kịch tính)
   genre?: string // thể loại gợi ý (VD: kể chuyện đời thường, quảng cáo cảm xúc, hài tình huống)
   duration_hint?: string // độ dài dự kiến (VD: "30–45 giây, ~5 cảnh")
+  // ⭐ Ý ĐỒ ĐẦU RA — mô tả TỰ DO (KHÔNG enum): video này để kể chuyện thuần,
+  // để bán/chuyển đổi, hay lai. Dẫn tông toàn pipeline + quyết định có/không CTA.
+  // Mặc định nghiêng kể chuyện; chỉ ghi mục tiêu thương mại khi ideal nêu rõ.
+  output_intent?: string
 }
 
 /**

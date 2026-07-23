@@ -186,6 +186,11 @@ const writeIdealBrief: ToolDef = {
         duration_hint: {
           type: 'string',
           description: 'Độ dài dự kiến (VD: "30–45 giây, ~5 cảnh")'
+        },
+        output_intent: {
+          type: 'string',
+          description:
+            'Ý đồ đầu ra — mô tả TỰ DO: kể chuyện thuần / có bán-chuyển đổi / lai. Mặc định nghiêng kể chuyện (không CTA); chỉ nêu mục tiêu thương mại + mức CTA khi ideal nói rõ bán hàng.'
         }
       }
     }
@@ -200,7 +205,8 @@ const writeIdealBrief: ToolDef = {
       claims_flagged: input.claims_flagged as string[] | undefined,
       mood: input.mood as string | undefined,
       genre: input.genre as string | undefined,
-      duration_hint: input.duration_hint as string | undefined
+      duration_hint: input.duration_hint as string | undefined,
+      output_intent: input.output_intent as string | undefined
     })
     return { ok: true }
   }
