@@ -43,7 +43,7 @@ function orchestratorTools(projectId: number, onStep?: (s: AgentStep) => void): 
       name: 'run_worker',
       description:
         'Giao 1 CỔNG cho thợ con làm (thợ tự dựng cảnh/kịch bản/prompt và ghi DB). ' +
-        'gate: gate0 (ý đồ/bối cảnh) | gate1a (nháp) | gate1b (khung xương) | gate1c (chuyển thể) | ' +
+        'gate: gate0 (chỉ ý đồ — KHÔNG tạo cảnh/@tag) | gate1a (nháp) | gate1b (khung xương) | gate1c (chuyển thể) | ' +
         'gate1d (kịch bản final) | director (quy hoạch đạo diễn) | assets (nguyên liệu) | ' +
         'gate2 (prompt ảnh) | gate3 (prompt video). ' +
         'instruction = lệnh NGẮN (≤100 chữ) nói LÀM GÌ, không nói làm thế nào. ' +

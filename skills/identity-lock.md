@@ -18,4 +18,4 @@ Khi prompt nhắc tới nhân vật/đạo cụ đã có asset, PHẢI:
 
 ## Ai tạo tag?
 
-`ideaAnalyst` phát hiện nhân vật/đạo cụ lặp lại trong ideal → gọi `save_asset` tạo tag + identity_lock (mặt/dáng nếu ideal có mô tả; không có thì để trống, người dùng bổ sung ảnh tư liệu sau).
+`assetDeriver` (cổng NGUYÊN LIỆU / gate_assets) TÁCH @tag TỪ kịch bản final: đọc toàn văn narration (`read_script_full`) rồi `derive_assets` cho nhân vật/bối cảnh/đạo cụ LẶP LẠI thật sự có trong kịch bản. `ideaAnalyst` (gate0) CHỈ chốt ý đồ — KHÔNG tạo cảnh, KHÔNG tạo @tag. Mặt/dáng để trống nếu kịch bản chưa tả; người dùng bổ sung ảnh tư liệu sau.
