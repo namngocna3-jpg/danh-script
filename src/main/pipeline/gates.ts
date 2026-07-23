@@ -285,6 +285,7 @@ function snapshotForGate(projectId: number, gateStage: string): string {
     if (b.mood) lines.push(`Tông/mood: ${b.mood}`)
     if (b.genre) lines.push(`Thể loại: ${b.genre}`)
     if (b.duration_hint) lines.push(`Độ dài dự kiến: ${b.duration_hint}`)
+    if (b.output_intent) lines.push(`Ý đồ đầu ra: ${b.output_intent}`)
     if (b.triggers?.length) lines.push(`Trigger: ${b.triggers.join(', ')}`)
     if (b.research_notes?.length) lines.push(`Research: ${b.research_notes.join(' | ')}`)
     if (b.claims_flagged?.length) lines.push(`Cờ khẳng định: ${b.claims_flagged.join(' | ')}`)
