@@ -24,6 +24,7 @@ Danh Script **suy bối cảnh từ ideal** (ideaAnalyst), KHÔNG chọn thể l
 - `sales-testimonial` — chứng thực / phản hồi khách hàng
 - `sales-talking-head-kol` — KOL nói thẳng máy (talking-head)
 - `sales-before-after` — trước–sau / lột xác / hiệu quả
+- `sales-course-launch` — mở bán khóa học / workshop / coaching
 
 **B · KỂ CHUYỆN / mini-drama**
 - `story-urban-romance` — ngôn tình đô thị hiện đại
@@ -43,6 +44,7 @@ Danh Script **suy bối cảnh từ ideal** (ideaAnalyst), KHÔNG chọn thể l
 - `misc-travel-vlog` — du lịch / vlog
 - `misc-food` — ẩm thực / nấu ăn
 - `misc-explainer` — giải thích / giáo dục / kiến thức
+- `misc-tutorial-howto` — hướng dẫn / dạy kỹ năng (how-to từng bước)
 - `misc-trailer` — trailer phim / teaser kịch tính
 - `misc-realestate` — bất động sản / không gian
 - `misc-real-human-ekyc` — người thật eKYC / Real Face (Coco)
