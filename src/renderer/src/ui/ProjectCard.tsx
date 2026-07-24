@@ -19,6 +19,7 @@ const STAGE_LABEL: Record<Stage, string> = {
   gate_params: 'GATE · Tham số',
   gate_director: 'Quy hoạch đạo diễn',
   gate_assets: 'Nguyên liệu',
+  gate_storyboard: 'Phân cảnh',
   gate2_image: 'GATE 2 · Prompt ảnh',
   gate3_video: 'GATE 3 · Prompt video',
   gate4_export: 'GATE 4 · Xuất',

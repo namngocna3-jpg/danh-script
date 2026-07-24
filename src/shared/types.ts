@@ -38,6 +38,7 @@ export type Stage =
   | 'gate_params'
   | 'gate_director' // ⭐ Quy hoạch đạo diễn (tách cảnh + đếm thoại + chấm cảm xúc 0–10 + chuyển cảnh)
   | 'gate_assets'
+  | 'gate_storyboard'
   | 'gate2_image'
   | 'gate3_video'
   | 'gate4_export'
@@ -194,7 +195,23 @@ export interface Block {
   shot_desc: string | null // ý đồ shot quy hoạch trước ở GATE 1 (góc/hành động/nội dung khung)
   image_prompt_en: string | null
   video_prompt_json: string | null
+  shot_panel_json: string | null
   rendered_bool: 0 | 1
+}
+
+/** 1 block = 1 shot: khối phân cảnh chi tiết (cột blocks.shot_panel_json, JSON). */
+export interface ShotPanel {
+  shot_size: string
+  camera_angle: string
+  camera_move: string
+  subject: string
+  action_start: string
+  action_end: string
+  layout: string | null
+  cuts: string | null
+  duration_sec: number
+  asset_tags: string[]
+  notes: string | null
 }
 
 export interface Asset {
@@ -404,6 +421,7 @@ export type ChatGateStage =
   | 'gate1_script' // legacy
   | 'gate_director'
   | 'gate_assets'
+  | 'gate_storyboard'
   | 'gate2_image'
   | 'gate3_video'
 
