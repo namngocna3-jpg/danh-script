@@ -13,6 +13,7 @@ import {
 } from '../core/skillLoader'
 import { toolsFor } from '../tools'
 import { workerSpec } from './workerSpecs'
+import { availableCraftFor, availableSkillsPrompt } from '../core/craftRegistry'
 import { extractTags, checkTagsExist } from './tagGuard'
 import {
   getProject,
@@ -177,18 +178,27 @@ export async function runGateChat(
 
   const layerParts = spec.layers.map((f) => readSkillOptional(f)).filter(Boolean)
 
-  // Genre à-la-carte (TÙY CHỌN) cho cổng kịch bản final.
-  if (gateStage === 'gate1d_script' && project.params_json) {
+  // Genre à-la-carte (TÙY CHỌN) — đọc 1 lần, dùng cho cả craft tự-rút.
+  let genreId: string | null = null
+  if (project.params_json) {
     try {
-      const genre = (JSON.parse(project.params_json) as { genre?: string }).genre
-      if (genre) {
-        const genreSkill = readSkillOptional(`genres/${genre}.md`)
-        if (genreSkill) layerParts.push(genreSkill)
-      }
+      genreId = (JSON.parse(project.params_json) as { genre?: string }).genre ?? null
     } catch (e) {
       console.warn('[danh-script] runGateChat: params_json hỏng, bỏ qua genre', e)
     }
   }
+  // Genre nạp TĨNH cho cổng kịch bản final (giữ hành vi cũ — nhịp kể là cốt lõi ở đây).
+  if (gateStage === 'gate1d_script' && genreId) {
+    const genreSkill = readSkillOptional(`genres/${genreId}.md`)
+    if (genreSkill) layerParts.push(genreSkill)
+  }
+
+  // ⭐ Kho CRAFT tự-rút (progressive-disclosure): chèn danh sách <available_skills>
+  //    khớp bước + style + genre; thợ tự gọi read_skill_file khi cần chiều sâu.
+  //    (gate1d đã nạp tĩnh genre ở trên → loại axis=story khỏi danh sách để khỏi trùng.)
+  let craft = availableCraftFor(gateStage, project.style_id, genreId)
+  if (gateStage === 'gate1d_script') craft = craft.filter((c) => c.axis !== 'story')
+  const craftBlock = availableSkillsPrompt(craft)
 
   // Lớp giao thức hội thoại luôn nằm cuối để "đè" cách hành xử.
   const chatProtocol = readSkillOptional('free/_chat_protocol.md')
@@ -197,6 +207,7 @@ export async function runGateChat(
       composeSystem(
         loadExecutionSkill(project.pipeline, spec.worker),
         ...layerParts,
+        craftBlock,
         chatProtocol
       ),
       project.style_id
@@ -207,10 +218,13 @@ export async function runGateChat(
   const history = loadGateChat(projectId, gateStage) as Array<{ role: string; content: unknown }>
   const userTurn = userMessage ?? spec.kickoff
 
+  // Cấp thêm tool tự-rút craft cho MỌI cổng (chỉ khi có craft khả dụng để đỡ nhiễu).
+  const toolNames = craft.length ? [...spec.tools, 'list_skills', 'read_skill_file'] : spec.tools
+
   const result = await runAgent({
     system,
     userPrompt: userTurn,
-    tools: toolsFor(spec.tools),
+    tools: toolsFor(toolNames),
     ctx: { projectId },
     history,
     maxSteps: 14,

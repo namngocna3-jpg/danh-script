@@ -37,7 +37,7 @@ function bundledSkillsDir(): string {
 }
 
 /** Tìm thư mục skills/ để ĐỌC: userData trước (sửa được), rồi mới đến bản gói. */
-function skillsRoot(): string {
+export function skillsRoot(): string {
   const u = userSkillsDir()
   if (existsSync(u)) return u
   return bundledSkillsDir()

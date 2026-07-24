@@ -22,6 +22,7 @@ import {
   assertPlanShots,
   assertImagePrompt
 } from './validators'
+import { scanCraft, readCraftFile } from '../core/craftRegistry'
 
 /** Ngữ cảnh chạy tool: buộc trong 1 dự án. */
 export interface ToolContext {
@@ -797,6 +798,61 @@ const readAssetCoverage: ToolDef = {
   handler: (_input, ctx) => db.assetCoverage(ctx.projectId)
 }
 
+// ---------------- Craft tự-rút (progressive-disclosure) ----------------
+
+const listSkills: ToolDef = {
+  schema: {
+    name: 'list_skills',
+    description:
+      'Liệt kê KHO CRAFT khả dụng cho dự án (theo phong cách + thể loại đã chọn): tên · mô tả · path. ' +
+      'Dùng khi cần xem có "vốn nghề" chiều sâu nào để rút. Sau đó gọi read_skill_file(path) để đọc toàn văn.',
+    input_schema: { type: 'object', properties: {} }
+  },
+  handler: (_input, ctx) => {
+    const p = db.getProject(ctx.projectId)
+    if (!p) throw new Error('Không tìm thấy dự án')
+    let genre: string | null = null
+    try {
+      if (p.params_json) genre = (JSON.parse(p.params_json) as { genre?: string }).genre ?? null
+    } catch {
+      /* params hỏng → bỏ genre */
+    }
+    const craft = scanCraft().filter((c) => {
+      if (c.axis === 'common') return true
+      if (c.axis === 'art') return c.relPath === `styles/${p.style_id}/craft.md`
+      if (c.axis === 'story') return Boolean(genre) && c.relPath === `genres/${genre}.md`
+      return false
+    })
+    return {
+      skills: craft.map((c) => ({
+        name: c.name,
+        description: c.description,
+        axis: c.axis,
+        path: c.relPath
+      }))
+    }
+  }
+}
+
+const readSkillFileTool: ToolDef = {
+  schema: {
+    name: 'read_skill_file',
+    description:
+      'Đọc TOÀN VĂN 1 craft trong kho theo path (VD "styles/2d_flat_design/craft.md" hoặc ' +
+      '"genres/sales-affiliate-review.md" hoặc "craft/skeleton-craft.md"). Chỉ đọc file .md trong skills/.',
+    input_schema: {
+      type: 'object',
+      properties: { path: { type: 'string', description: 'Đường dẫn tương đối trong skills/' } },
+      required: ['path']
+    }
+  },
+  handler: (input) => {
+    const path = String(input.path || '').trim()
+    if (!path) throw new Error('Thiếu path')
+    return { path, content: readCraftFile(path) }
+  }
+}
+
 // ---------------- Registry ----------------
 
 export const ALL_TOOLS: ToolDef[] = [
@@ -826,7 +882,10 @@ export const ALL_TOOLS: ToolDef[] = [
   writeAssetPrompt,
   saveDerivedAssetTool,
   writeVisualSystem,
-  readAssetCoverage
+  readAssetCoverage,
+  // craft tự-rút (progressive-disclosure)
+  listSkills,
+  readSkillFileTool
 ]
 
 /** Lọc tool theo tên (mỗi agent-thợ chỉ được cấp 1 nhóm tool). */
