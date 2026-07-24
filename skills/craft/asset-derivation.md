@@ -1,6 +1,6 @@
 ---
 name: Craft TÁCH NGUYÊN LIỆU + prompt asset
-description: Cách tách nhân vật/bối cảnh/đạo cụ lặp lại từ kịch bản + sinh prompt tạo ảnh gốc (character sheet, multi-angle, lưới). Dùng ở bước Nguyên liệu.
+description: Cách tách nhân vật/bối cảnh/đạo cụ lặp lại từ kịch bản + sinh prompt tạo ảnh gốc (character sheet, bối cảnh 1 ảnh 1 góc sạch, lưới 2×2). Dùng ở bước Nguyên liệu.
 axis: common
 steps: [gate_assets]
 ---
@@ -15,7 +15,7 @@ steps: [gate_assets]
 
 ## 2. Prompt asset gốc theo LOẠI
 - **Nhân vật = character sheet 4-view:** nền #F8F4E8, mặt mộc (không trang điểm cảnh), khai báo TỈ LỆ đầu-thân (VD 1:7), 4 góc (trước/nghiêng/sau/¾). Đây là "chứng minh thư" để mọi cảnh đồng nhất.
-- **Bối cảnh = multi-angle KHÔNG người:** 2–3 góc cùng không gian, ánh sáng trung tính, để cảnh sau đặt nhân vật vào.
+- **Bối cảnh = 1 ẢNH SẠCH 1 GÓC, KHÔNG người:** 1 ảnh establishing đại diện (16:9), ánh sáng trung tính, để cảnh sau đặt nhân vật vào. KHÔNG ghép nhiều góc/lưới trong 1 ảnh (ghép sẽ hỏng khi upload làm ảnh tham chiếu). Cần nhiều góc/địa điểm = nhiều asset scene hoặc derivative `angle`.
 - **Đạo cụ = lưới 2×2:** vật trên nền sạch, vài góc, rõ chất liệu. Đạo cụ KHÔNG phái sinh biến thể.
 
 ## 3. Biến thể (derivative) — chỉ khi cảnh CẦN

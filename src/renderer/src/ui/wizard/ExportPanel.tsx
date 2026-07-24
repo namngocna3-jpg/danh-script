@@ -151,6 +151,7 @@ export function ExportPanel({ projectId }: { projectId: number }): JSX.Element {
             narration={b.narration_vi}
             imagePrompt={b.image_prompt_en}
             videoPrompt={b.video_prompt}
+            stylePrefix={bundle.stylePrefix}
           />
         ))}
       </div>
@@ -163,15 +164,17 @@ function BlockCard({
   blockOrder,
   narration,
   imagePrompt,
-  videoPrompt
+  videoPrompt,
+  stylePrefix
 }: {
   sceneOrder: number
   blockOrder: number
   narration: string
   imagePrompt: string
   videoPrompt: VideoPrompt | null
+  stylePrefix: string | null
 }): JSX.Element {
-  const videoText = videoPrompt ? videoPromptToText(videoPrompt) : ''
+  const videoText = videoPrompt ? videoPromptToText(videoPrompt, stylePrefix) : ''
   return (
     <div className="card p-4">
       <div className="mb-3 flex items-center gap-2">
@@ -232,14 +235,18 @@ function PromptBox({
 }
 
 /** Gộp các trường video prompt thành text copy được (Seedance đọc CONSTRAINTS, bỏ NEGATIVE). */
-function videoPromptToText(v: VideoPrompt): string {
-  const lines = [
+function videoPromptToText(v: VideoPrompt, stylePrefix?: string | null): string {
+  const lines: string[] = []
+  if (stylePrefix?.trim()) {
+    lines.push(`STYLE PREFIX (dán verbatim vào đầu mọi prompt):\n${stylePrefix.trim()}\n---`)
+  }
+  lines.push(
     `STYLE: ${v.style}`,
     `SCENE: ${v.scene}`,
     `MOTION: ${v.motion}`,
     `AUDIO: ${v.audio}`,
     `CONSTRAINTS (Seedance đọc): ${v.constraints ?? ''}`
-  ]
+  )
   if (v.negative?.trim()) lines.push(`NEGATIVE (dự phòng, Seedance bỏ qua): ${v.negative}`)
   if (v.text_overlay?.trim())
     lines.push(`TEXT OVERLAY (dán ở CapCut, KHÔNG render trong clip): "${v.text_overlay}"`)
@@ -254,6 +261,15 @@ function bundleToMarkdown(bundle: ExportBundle): string {
   L.push(`- **Style:** ${bundle.styleId ?? '—'}`)
   L.push(`- **Số block:** ${bundle.blocks.length}`)
   L.push('')
+
+  if (bundle.stylePrefix?.trim()) {
+    L.push('## Style Prefix — dán vào đầu MỌI prompt')
+    L.push('')
+    L.push('```')
+    L.push(bundle.stylePrefix.trim())
+    L.push('```')
+    L.push('')
+  }
 
   if (bundle.skeleton) {
     const sk = bundle.skeleton

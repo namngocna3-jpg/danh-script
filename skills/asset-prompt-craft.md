@@ -1,6 +1,6 @@
 # LỚP · asset-prompt-craft (công thức prompt tạo ảnh nguyên liệu) ⭐⭐
 
-> Công thức **sinh PROMPT tạo ảnh nguyên liệu** (character sheet / multi-angle / lưới 2×2 / biến thể). Chưng cất từ Toonflow `art_skills` (12 phong cách × 7 file art_prompt) + tài liệu Visual Dev. Nạp cho **assetDeriver (gate_assets)**.
+> Công thức **sinh PROMPT tạo ảnh nguyên liệu** (character sheet / bối cảnh 1 ảnh 1 góc sạch / lưới 2×2 / biến thể). Chưng cất từ Toonflow `art_skills` (12 phong cách × 7 file art_prompt) + tài liệu Visual Dev. Nạp cho **assetDeriver (gate_assets)**.
 >
 > ⚠️ App **dừng ở prompt**: bạn viết prompt, người dùng copy → Coco/ComfyUI tạo ảnh → upload ảnh về app. Prompt phải đủ để tạo ảnh dùng được NGAY.
 
@@ -32,6 +32,8 @@ Bắt buộc trong prompt:
 
 > Mẫu ý: *"character reference sheet, 4 views on one canvas: close-up portrait / full-body front 0° / side profile 90° / back 180°; warm off-white #F8F4E8 background, flat even lighting, bare face, neutral base outfit; [female, ~160cm, 6-head proportion]; [STYLE]."*
 
+> ⭐ **Ref khóa mặt cho VIDEO (nhân vật chính):** ngoài sheet 4-view (dùng TẠO ảnh gốc), tạo THÊM 1 biến thể `state` close-up mặt sạch — *"clean single-face close-up, front, neutral expression, #F8F4E8 background"* — làm @tag reference khi khóa mặt ở GATE 3. Sheet nhiều mặt (4-view) dễ khiến Seedance **drift mặt qua từng cảnh**; 1 close-up sạch giữ danh tính ổn hơn khi làm ref video. Chỉ char CHÍNH, không tính vào giới hạn "thà thiếu hơn thừa".
+
 ## 1b. Nhân vật — PHÁI SINH (hệ lớp, giữ mặt+dáng)
 
 Phái sinh = **img2img trên ảnh gốc**, GIỮ mặt + dáng, chỉ đổi 1 lớp. Toonflow chia 7 lớp L0–L6:
@@ -43,19 +45,21 @@ Mỗi biến thể 1 prompt, mở đầu bằng *"same face and body as referenc
 
 ---
 
-## 2. Bối cảnh (scene) — MULTI-ANGLE, KHÔNG NGƯỜI
+## 2. Bối cảnh (scene) — 1 ẢNH SẠCH, 1 GÓC, KHÔNG NGƯỜI
 
-Ảnh gốc bối cảnh = **nhiều góc từ 1 không gian** (để cảnh nào cũng ghép được):
-- Toàn cảnh (establishing wide) + trung cảnh + cận chi tiết đặc trưng.
-- Vài góc máy khác nhau của cùng nơi chốn.
+Ảnh gốc bối cảnh = **MỘT ảnh establishing sạch, MỘT góc đại diện** của không gian, tỉ lệ 16:9:
+- **1 ảnh 1 góc** (establishing wide đại diện) — KHÔNG ghép nhiều góc/lưới/collage trong 1 ảnh.
 - **TUYỆT ĐỐI không có người** trong ảnh scene.
+- ⚠️ Ảnh gốc sạch 1 góc là để dùng làm **ảnh tham chiếu tải lên Coco** — ghép grid nhiều góc sẽ làm upload/khóa bối cảnh HỎNG.
+
+Cần **nhiều góc hoặc nhiều địa điểm**? → **tách thành asset scene RIÊNG** (mỗi địa điểm/góc chính 1 @tag), hoặc tạo **derivative `angle`** từ ảnh gốc — KHÔNG nhồi nhiều góc vào 1 ảnh.
 
 Prompt nêu: kiến trúc/layout, lớp hậu cảnh (background layers), cây cối/vật thể cố định. Có thể mang ánh sáng/màu (scene LÀ nơi giữ tông).
 
 ## 2b. Bối cảnh — PHÁI SINH
 - `time` — cùng nơi, đổi thời điểm (bình minh/trưa/hoàng hôn/đêm).
 - `weather` — đổi thời tiết (nắng/mưa/sương/tuyết).
-- `angle` — thêm góc máy khác của cùng cảnh.
+- `angle` — **1 góc máy khác** của cùng cảnh (mỗi biến thể vẫn là 1 ảnh 1 góc sạch, KHÔNG ghép).
 Vẫn KHÔNG người. Mỗi cảnh 1–5 biến thể theo nhu cầu kịch bản.
 
 ---
@@ -74,7 +78,7 @@ Vẫn KHÔNG người. Mỗi cảnh 1–5 biến thể theo nhu cầu kịch b�
 ---
 
 ## 4. Checklist trước khi ghi prompt
-- [ ] Đúng loại công thức theo type (char→4-view, scene→multi-angle, prop→2×2)?
+- [ ] Đúng loại công thức theo type (char→4-view, scene→1 ảnh 1 góc sạch KHÔNG người, prop→2×2)?
 - [ ] Nhân vật: nền #F8F4E8, mặt mộc, có khai báo tỉ lệ đầu-thân?
 - [ ] Nhân vật/đạo cụ: KHÔNG có màu/ánh sáng cụ thể?
 - [ ] Scene: KHÔNG có người?

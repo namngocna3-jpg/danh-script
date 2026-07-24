@@ -121,10 +121,11 @@ const CHAT_GATES: Record<string, ChatGateSpec> = {
     ],
     layers: workerSpec('assetDeriver').layers,
     kickoff:
-      'Người dùng vừa mở cổng NGUYÊN LIỆU. Hãy chào ngắn, đọc toàn bộ kịch bản (read_script_full) + cảnh + @tag đã có (read_assets). ' +
+      'Người dùng vừa mở cổng NGUYÊN LIỆU. BƯỚC 0 (đọc-trước-khi-làm): đọc sổ cái các bước trước — read_plan (khung xương/chuyển thể/đạo diễn/hệ thị giác) + read_script_full (toàn văn kịch bản) + read_scenes (bối cảnh) + read_assets (@tag đã có). ' +
+      'CẤM bịa nhân vật/bối cảnh/đạo cụ KHÔNG có trong kịch bản; thiếu tiền đề thì báo, không tự chế. Sau đó chào ngắn. ' +
       'Làm TUẦN TỰ:\n' +
       '① derive_assets — TÁCH nguyên liệu TỪ kịch bản (nhân vật/bối cảnh/đạo cụ lặp lại), KHÔNG bịa thứ kịch bản không có.\n' +
-      '② write_asset_prompt cho MỖI asset gốc — sinh PROMPT tạo ảnh: nhân vật = character sheet 4-view (nền #F8F4E8, mặt mộc, khai báo tỉ lệ đầu-thân); bối cảnh = multi-angle KHÔNG người; đạo cụ = lưới 2×2.\n' +
+      '② write_asset_prompt cho MỖI asset gốc — sinh PROMPT tạo ảnh: nhân vật = character sheet 4-view (nền #F8F4E8, mặt mộc, khai báo tỉ lệ đầu-thân); bối cảnh = 1 ảnh establishing SẠCH, MỘT góc đại diện, KHÔNG người, 16:9 (nhiều góc/địa điểm → tách asset scene riêng hoặc derivative angle, KHÔNG ghép nhiều góc trong 1 ảnh); đạo cụ = lưới 2×2.\n' +
       '③ save_derived_asset cho biến thể cần thiết (nhân vật: biến thể trang phục/trạng thái; bối cảnh: thời gian/thời tiết/góc; đạo cụ KHÔNG phái sinh) — mỗi asset 1–5 biến thể, "thà thiếu còn hơn thừa".\n' +
       '④ write_visual_system — Color Script (tone màu từng cảnh) + ánh sáng + chất liệu toàn phim.\n' +
       'Người dùng sẽ copy prompt sang Coco tạo ảnh rồi upload về — nên prompt phải đủ để tạo ảnh ngay. Cuối cùng gọi read_asset_coverage để soát asset nào còn thiếu prompt.'
@@ -134,7 +135,8 @@ const CHAT_GATES: Record<string, ChatGateSpec> = {
     tools: [...READ_TOOLS, 'read_coverage', 'save_asset', 'write_image_prompt'],
     layers: workerSpec('imgPrompter').layers,
     kickoff:
-      'Người dùng vừa mở cổng PROMPT ẢNH. Hãy chào ngắn, đọc ideal + cảnh + shot đã quy hoạch (read_blocks) + @tag (read_assets), ' +
+      'Người dùng vừa mở cổng PROMPT ẢNH. BƯỚC 0 (đọc-trước-khi-làm): đọc read_ideal + read_plan (hệ thị giác/Color Script) + read_scenes + read_blocks (shot đã quy hoạch) + read_assets (@tag đã có). ' +
+      'CẤM bịa asset/@tag không có trong sổ — chỉ nhúng @tag đã tồn tại; thiếu tiền đề thì báo. Sau đó chào ngắn, ' +
       'rồi dựng prompt ảnh khung đầu (tiếng Anh, 3 đoạn, nhúng @tag) cho MỖI block đã có shot_desc. ' +
       'Cuối cùng gọi read_coverage để chắc KHÔNG block nào thiếu ảnh. Hỏi nếu còn điểm chưa rõ.'
   },
@@ -143,8 +145,10 @@ const CHAT_GATES: Record<string, ChatGateSpec> = {
     tools: [...READ_TOOLS, 'read_coverage', 'write_video_prompt'],
     layers: workerSpec('vidPrompter').layers,
     kickoff:
-      'Người dùng vừa mở cổng PROMPT VIDEO. Hãy chào ngắn, đọc ideal + block đã có prompt ảnh (read_blocks) + @tag (read_assets), rồi ' +
-      'dựng prompt video (STYLE/SCENE/MOTION/AUDIO/CONSTRAINTS + TEXT_OVERLAY nếu cần) cho MỖI block. ' +
+      'Người dùng vừa mở cổng PROMPT VIDEO. BƯỚC 0 (đọc-trước-khi-làm): đọc ideal + block đã có prompt ẢNH KHUNG ĐẦU GATE 2 (read_blocks) + @tag (read_assets); CẤM bịa block/asset không có trong sổ. ' +
+      'LUẬT VÀNG image-to-video: mỗi block ĐÃ CÓ ảnh khung đầu (nhân vật/bối cảnh/trang phục/đạo cụ đã đứng yên trong ảnh) → prompt video CHỈ LÀM ĐỘNG ảnh đó, CẤM tả lại ngoại hình/bối cảnh/trang phục. SCENE ngắn (chỉ thay đổi/diễn biến), MOTION mang tải chính. ' +
+      'MULTI-SHOT (mọi thể loại): block được 1–3 shot (CUT-by-CUT) cắt bằng "Cut to"/"Lens switch to", mỗi shot khóa lại @tag để không drift; MOTION tả tư thế START→END + chi tiết vật lý (cấm động từ mơ hồ); CONSTRAINTS thêm 1 positive lock riêng block (danh tính @tag + vị trí + số lượng). ' +
+      'Chào ngắn rồi dựng prompt video (STYLE/SCENE/MOTION/AUDIO/CONSTRAINTS + TEXT_OVERLAY nếu cần) cho MỖI block. ' +
       'Cuối cùng gọi read_coverage để chắc KHÔNG block nào thiếu video. Hỏi nếu chưa rõ.'
   }
 }

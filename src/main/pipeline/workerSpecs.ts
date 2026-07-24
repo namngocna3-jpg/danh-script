@@ -23,6 +23,7 @@ export const WORKER_SPECS: Record<string, WorkerSpec> = {
   assetDeriver: {
     tools: [
       'read_ideal',
+      'read_plan',
       'read_scenes',
       'read_assets',
       'read_script_full',
@@ -42,6 +43,7 @@ export const WORKER_SPECS: Record<string, WorkerSpec> = {
   imgPrompter: {
     tools: [
       'read_ideal',
+      'read_plan',
       'read_scenes',
       'read_blocks',
       'read_assets',

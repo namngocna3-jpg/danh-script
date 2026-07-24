@@ -11,7 +11,8 @@ import {
   readSkillOptional,
   composeSystem,
   injectStyleAnchor,
-  injectOutputIntent
+  injectOutputIntent,
+  loadStyleAnchor
 } from '../core/skillLoader'
 import { toolsFor } from '../tools'
 import { workerSpec } from './workerSpecs'
@@ -26,7 +27,8 @@ import {
   getPlanArtifacts,
   saveReview,
   updateProjectStage,
-  listAssetsFull
+  listAssetsFull,
+  listBlockAssets
 } from '../db'
 import type {
   Block,
@@ -96,9 +98,10 @@ const GATES: Record<string, GateSpec> = {
     stage: 'gate_assets',
     layers: workerSpec('assetDeriver').layers,
     buildPrompt: () =>
-      `BƯỚC 1 BẮT BUỘC: gọi read_script_full + read_scenes + read_assets để đọc TOÀN VĂN kịch bản + bối cảnh + @tag đã có. ` +
+      `BƯỚC 0 BẮT BUỘC (đọc-trước-khi-làm): gọi read_plan + read_script_full + read_scenes + read_assets để nắm sổ cái các bước trước (khung xương/chuyển thể/đạo diễn) + TOÀN VĂN kịch bản + bối cảnh + @tag đã có. ` +
+      `CẤM bịa nhân vật/bối cảnh/đạo cụ không có trong kịch bản; thiếu tiền đề thì báo, không tự chế. ` +
       `Rồi TÁCH nguyên liệu TỪ kịch bản (không bịa): ① derive_assets (nhân vật/bối cảnh/đạo cụ lặp lại) ` +
-      `② write_asset_prompt cho mỗi asset gốc (nhân vật = character sheet 4-view nền #F8F4E8 mặt mộc + tỉ lệ đầu-thân; bối cảnh = multi-angle KHÔNG người; đạo cụ = lưới 2×2) ` +
+      `② write_asset_prompt cho mỗi asset gốc (nhân vật = character sheet 4-view nền #F8F4E8 mặt mộc + tỉ lệ đầu-thân; bối cảnh = 1 ảnh establishing SẠCH, MỘT góc đại diện, KHÔNG người, 16:9 — nhiều góc/địa điểm thì tách asset scene riêng, KHÔNG ghép nhiều góc 1 ảnh; đạo cụ = lưới 2×2) ` +
       `③ save_derived_asset biến thể cần thiết (mỗi asset 1–5, "thà thiếu hơn thừa") ` +
       `④ write_visual_system (Color Script + ánh sáng + chất liệu).`
   },
@@ -108,7 +111,8 @@ const GATES: Record<string, GateSpec> = {
     stage: 'gate2_image',
     layers: workerSpec('imgPrompter').layers,
     buildPrompt: () =>
-      `BƯỚC 1 BẮT BUỘC: gọi read_ideal + read_scenes + read_blocks + read_assets để đọc TOÀN VĂN ideal + bối cảnh + shot đã quy hoạch + @tag. ` +
+      `BƯỚC 0 BẮT BUỘC (đọc-trước-khi-làm): gọi read_ideal + read_plan + read_scenes + read_blocks + read_assets để nắm TOÀN VĂN ideal + hệ thị giác + bối cảnh + shot đã quy hoạch + @tag. ` +
+      `CẤM bịa asset/@tag không có trong sổ — chỉ nhúng @tag đã tồn tại; thiếu tiền đề thì báo. ` +
       `Rồi dựng prompt ẢNH khung đầu (tiếng Anh, 3 đoạn, nhúng @tag) cho mỗi block của mỗi cảnh. ` +
       `Mỗi cảnh tối thiểu 1 block (block_order bắt đầu 1). Cuối cùng read_coverage để chắc không block nào thiếu ảnh.`
   },
@@ -118,8 +122,12 @@ const GATES: Record<string, GateSpec> = {
     stage: 'gate3_video',
     layers: workerSpec('vidPrompter').layers,
     buildPrompt: () =>
-      `BƯỚC 1 BẮT BUỘC: gọi read_ideal + read_scenes + read_blocks + read_assets để đọc TOÀN VĂN ideal + block đã có prompt ảnh + @tag. ` +
-      `Rồi dựng prompt VIDEO (STYLE/SCENE/MOTION/AUDIO/CONSTRAINTS + NEGATIVE dự phòng + TEXT_OVERLAY nếu cần chữ, target BytePlus/Seedance) cho mỗi block đã có prompt ảnh. ` +
+      `BƯỚC 0 BẮT BUỘC (đọc-trước-khi-làm): gọi read_ideal + read_scenes + read_blocks + read_assets để nắm TOÀN VĂN ideal + block đã có prompt ẢNH KHUNG ĐẦU (GATE 2) + @tag đã có. ` +
+      `CẤM bịa asset/cảnh/block không có trong sổ; thiếu tiền đề thì báo, không tự chế. ` +
+      `LUẬT VÀNG image-to-video: mỗi block ĐÃ CÓ ảnh khung đầu ở GATE 2 (nhân vật/bối cảnh/trang phục/đạo cụ đã đứng yên trong ảnh). Prompt video chỉ LÀM ĐỘNG ảnh đó — CẤM tả lại ngoại hình/bối cảnh/trang phục. ` +
+      `SCENE ngắn (chỉ thay đổi/diễn biến), MOTION mang tải chính (camera + chuyển động chủ thể). ` +
+      `MULTI-SHOT (mọi thể loại): block được 1–3 shot (CUT-by-CUT) — >1 shot cắt bằng "Cut to"/"Lens switch to", mỗi shot khóa lại @tag để không drift danh tính. MOTION tả tư thế START→END + 1 chi tiết vật lý (cấm động từ mơ hồ). CONSTRAINTS thêm 1 positive lock riêng block (danh tính @tag + vị trí + số lượng). ` +
+      `Dựng prompt VIDEO (STYLE/SCENE/MOTION/AUDIO/CONSTRAINTS + NEGATIVE dự phòng + TEXT_OVERLAY nếu cần chữ, target BytePlus/Seedance) cho mỗi block đã có prompt ảnh. ` +
       `Nhúng @tag ở trường scene + truyền mảng tags. Cuối cùng read_coverage để chắc không block nào thiếu video.`
   }
 }
@@ -400,11 +408,13 @@ export interface ExportBlock {
   narration_vi: string
   image_prompt_en: string
   video_prompt: VideoPrompt | null
+  asset_ids: number[] // ⭐ id nguyên liệu/biến thể block này dùng (bảng nối block_assets)
 }
 
 export interface ExportBundle {
   projectName: string
   styleId: string | null
+  stylePrefix: string | null // ⭐ Style Prefix nguyên văn (anchor.md) — dán verbatim vào mọi prompt video
   tagMap: AssetTag[]
   blocks: ExportBlock[]
   skeleton: StorySkeleton | null
@@ -427,15 +437,18 @@ export function buildExport(projectId: number): ExportBundle {
         block_order: b.order_idx,
         narration_vi: s.narration_vi ?? '',
         image_prompt_en: b.image_prompt_en ?? '',
-        video_prompt: b.video_prompt_json ? (JSON.parse(b.video_prompt_json) as VideoPrompt) : null
+        video_prompt: b.video_prompt_json ? (JSON.parse(b.video_prompt_json) as VideoPrompt) : null,
+        asset_ids: listBlockAssets(b.id)
       })
     }
   }
   updateProjectStage(projectId, 'gate4_export')
   const plan = getPlanArtifacts(projectId)
+  const stylePrefix = loadStyleAnchor(project.style_id).trim() || null
   return {
     projectName: project.name,
     styleId: project.style_id,
+    stylePrefix,
     tagMap: projectTagMap(projectId),
     blocks,
     skeleton: plan.skeleton,

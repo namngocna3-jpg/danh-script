@@ -338,11 +338,13 @@ export interface ExportBlock {
   narration_vi: string
   image_prompt_en: string
   video_prompt: VideoPrompt | null
+  asset_ids: number[] // ⭐ id nguyên liệu/biến thể block này dùng (bảng nối block_assets)
 }
 
 export interface ExportBundle {
   projectName: string
   styleId: string | null
+  stylePrefix: string | null // ⭐ Style Prefix nguyên văn (anchor.md) — dán verbatim vào mọi prompt video
   tagMap: AssetTag[]
   blocks: ExportBlock[]
   skeleton: StorySkeleton | null // ⭐ khung xương cốt chuyện

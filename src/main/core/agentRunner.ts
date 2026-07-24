@@ -38,6 +38,64 @@ export interface RunAgentResult {
 }
 
 /**
+ * Làm sạch + đánh SỐ MỚI cho mọi cặp tool_use/tool_result trước khi gửi lên model.
+ *
+ * VÌ SAO: lịch sử hội thoại (chat-gate) được lưu nguyên xi vào DB rồi nạp lại mỗi
+ * lượt. Nó chứa các `tool_use id` CŨ. Cổng gom 9router có cơ chế chống trùng
+ * ("tool_use ids reset after 24s") → gửi lại id cũ trong 24s bị từ chối 400
+ * (`messages.N: tool_use ids`). Đồng thời nếu lượt trước chạm maxSteps/bị ngắt,
+ * history có thể còn khối tool_use MỒ CÔI (không có tool_result khớp) → cũng 400.
+ *
+ * Cách xử lý: (1) chỉ giữ cặp HỢP LỆ (tool_use có tool_result tương ứng, và ngược
+ * lại); (2) cấp id MỚI DUY NHẤT cho mỗi cặp → không bao giờ đụng bộ nhớ chống trùng.
+ * Trả về BẢN SAO — không đụng mảng gốc (vẫn lưu raw để nối lượt sau).
+ */
+function sanitizeToolHistory(
+  messages: Array<{ role: string; content: unknown }>
+): Array<{ role: string; content: unknown }> {
+  type Block = { type?: string; id?: string; tool_use_id?: string; [k: string]: unknown }
+  const useIds = new Set<string>()
+  const resultIds = new Set<string>()
+  for (const m of messages) {
+    if (!Array.isArray(m.content)) continue
+    for (const b of m.content as Block[]) {
+      if (b?.type === 'tool_use' && typeof b.id === 'string') useIds.add(b.id)
+      if (b?.type === 'tool_result' && typeof b.tool_use_id === 'string')
+        resultIds.add(b.tool_use_id)
+    }
+  }
+  // Hợp lệ = id xuất hiện ở CẢ tool_use lẫn tool_result.
+  const valid = new Set([...useIds].filter((id) => resultIds.has(id)))
+  const remap = new Map<string, string>()
+  let n = 0
+  for (const id of valid) remap.set(id, `tu_${n++}`)
+
+  const out: Array<{ role: string; content: unknown }> = []
+  for (const m of messages) {
+    if (!Array.isArray(m.content)) {
+      out.push(m)
+      continue
+    }
+    const blocks: Block[] = []
+    for (const b of m.content as Block[]) {
+      if (b?.type === 'tool_use') {
+        if (b.id && valid.has(b.id)) blocks.push({ ...b, id: remap.get(b.id) })
+        // bỏ tool_use mồ côi
+      } else if (b?.type === 'tool_result') {
+        if (b.tool_use_id && valid.has(b.tool_use_id))
+          blocks.push({ ...b, tool_use_id: remap.get(b.tool_use_id) })
+        // bỏ tool_result mồ côi
+      } else {
+        blocks.push(b)
+      }
+    }
+    if (blocks.length) out.push({ role: m.role, content: blocks })
+    // message rỗng sau khi lọc → loại bỏ
+  }
+  return out
+}
+
+/**
  * Chạy agent tới khi LLM ngừng gọi tool (stop_reason != tool_use) hoặc chạm maxSteps.
  * Trả text cuối + nhật ký tool.
  */
@@ -57,10 +115,13 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
 
   while (step < maxSteps) {
     step++
-    // Mỗi lượt LLM đi qua hàng đợi 800ms + timeout/retry
+    // Mỗi lượt LLM đi qua hàng đợi 800ms + timeout/retry.
+    // ⭐ Làm sạch + đánh id MỚI cho tool_use/tool_result trước khi gửi (chống 400
+    //    "tool_use ids" của 9router + loại khối mồ côi từ history cũ).
+    const sanitized = sanitizeToolHistory(messages)
     const turn = await llmQueue.enqueue(() =>
       chatToolTurn(
-        messages,
+        sanitized,
         toolSchemas,
         { system: opts.system, temperature: opts.temperature, maxTokens: 4096 },
         cfg

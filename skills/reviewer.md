@@ -51,7 +51,7 @@ Mỗi thợ có "Khung output bắt buộc" trong skill. **Nếu bỏ TRỐNG m�
 
 ### gate_assets (Nguyên liệu)
 - **RA1 · Tách từ kịch bản, không bịa**: chỉ nguyên liệu thật sự xuất hiện/lặp trong narration.
-- **RA2 · Đúng công thức tạo hình**: char = 4-view nền #F8F4E8 mặt mộc + khai báo tỉ lệ; scene = multi-angle KHÔNG người; prop = lưới 2×2 không tay.
+- **RA2 · Đúng công thức tạo hình**: char = 4-view nền #F8F4E8 mặt mộc + khai báo tỉ lệ; scene = 1 ảnh 1 góc sạch KHÔNG người 16:9 (KHÔNG ghép grid nhiều góc); prop = lưới 2×2 không tay.
 - **RA3 · Không rò màu/ánh sáng** vào prompt nhân vật/đạo cụ (chỉ scene + Color Script mang màu).
 - **RA4 · Phái sinh đúng phạm vi**: char phái sinh giữ mặt+dáng chỉ đổi 1 lớp; prop KHÔNG phái sinh; ≤5 biến thể/gốc.
 
@@ -74,9 +74,13 @@ Mỗi thợ có "Khung output bắt buộc" trong skill. **Nếu bỏ TRỐNG m�
 
 **gate_director — phân tích có trung thực không:** đếm thoại có khớp narration thật? intensity có ARC (cao trào cao nhất)? nền cảm xúc cụ thể (không "buồn" rỗng)? chuyển cảnh chỉ đặt nơi cần?
 
-**gate_assets — prompt có tạo được ảnh dùng ngay không:** char có 4-view + tỉ lệ đầu-thân + nền chuẩn? scene multi-angle không người? Color Script có ARC màu bám cảm xúc? số phái sinh "thà thiếu hơn thừa"?
+**gate_assets — prompt có tạo được ảnh dùng ngay không:** char có 4-view + tỉ lệ đầu-thân + nền chuẩn? scene 1 ảnh 1 góc sạch không người (KHÔNG ghép grid)? Color Script có ARC màu bám cảm xúc? số phái sinh "thà thiếu hơn thừa"? ⭐ **KHÔNG phạt** biến thể close-up mặt sạch của char chính (`clean single-face close-up`) — đó là ref khóa mặt cho VIDEO, có công dụng rõ, không tính là phái sinh thừa.
 
 **gate2_image / gate3_video — prompt có đúng nghề không:** cấu trúc 3 đoạn/6-phần đúng tỉ lệ (Hình DÀI nhất, Style NGẮN nhất)? @tag nhúng đủ chỗ tên nhân vật/đạo cụ? image-to-video chỉ tả thay đổi (không tả lại vật đứng yên)? không từ làm mờ ảnh (film grain/imperfect focus)?
+- ⭐ **POSITIVE LOCK per-block:** block tái dùng nhân vật/sản phẩm → `constraints` có 1 câu khóa riêng nhắc lại danh tính @tag + vị trí + SỐ LƯỢNG? Thiếu = 🟡.
+- ⭐ **MOTION vật lý:** `motion` có động từ mơ hồ ("chạy/cầm/vung") mà KHÔNG kèm tư thế START→END + chi tiết vật lý → 🟡.
+- ⭐ **Mốc 5–8s:** diễn biến chuyển động ở giây 5–8 (nơi Seedance hay hỏng) có được đặc tả rõ không, nhất là block phân đoạn thời gian? Bỏ trống khúc này = 🟡.
+- **CUT-by-CUT (mọi thể loại):** block dùng >1 shot → có nối `Cut to`/`Lens switch to` + cùng khóa @tag giữa các cắt không (tránh drift)?
 
 ## Định dạng báo cáo (Markdown)
 ```

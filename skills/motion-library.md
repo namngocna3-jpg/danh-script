@@ -58,7 +58,9 @@ Ví dụ: *"the character turns head slowly to camera, slow dolly-in, shallow de
 - Đổi cỡ cảnh giữa đầu→cuối phải theo递进 (đẩy = siết dần, kéo = nhả dần), không nhảy cóc.
 
 ## LUẬT (giữ chặt)
-- **1 block = 1 nhịp máy.** Không nhồi 3 chuyển động vào 1 clip 5–8s.
+- **1–3 nhịp/block (CUT-by-CUT) — mọi thể loại video.** Mỗi CUT chọn 1 preset camera + 1 subject beat, nối bằng `Cut to`/`Lens switch to`, tối đa 3 cắt (byteplus-spec mục 6). One-take → `No cuts throughout`. Đừng nhồi 3 chuyển động RỐI vào 1 nhịp — CUT phải rành mạch từng shot.
+- ⭐ **Chuyển động chủ thể có ARC năng lượng**, đừng 1 mức đều: tĩnh→bùng / căng→giãn / chậm→nhanh. Tả **LỰC** (weight shift, uncoil, momentum, khối lượng) — không tả caption bề ngoài. 1 mức năng lượng phẳng = "arbitrary", model dễ méo.
+- ⭐ **Có map bố trí vị trí** (`layout: @A center-left, @B background-right...`) → camera move KHÔNG được phá vị trí đã khóa; giữ các @tag đúng chỗ suốt clip.
 - **Nhất quán hướng nhìn** xuyên block (khóa trái/giữa/phải; đổi hướng phải có động tác quay rõ).
 - **Bullet Time / 360° orbit**: tối đa 1 lần cho cả video, để dành cho khoảnh khắc đỉnh.
 - **Có chuyển động máy → chọn "not fixed camera"** (luật BytePlus, xem byteplus-spec mục 4). Muốn cực ổn định → `static shot, steady camera on tripod` + fixed camera.

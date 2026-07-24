@@ -23,6 +23,26 @@ import {
   assertImagePrompt
 } from './validators'
 import { scanCraft, readCraftFile } from '../core/craftRegistry'
+import { extractTags } from '../pipeline/tagGuard'
+
+/**
+ * Nối 1 block → các asset nó dùng, gộp 2 nguồn:
+ *  · agent KHAI RÕ qua field associate_asset_tags (nếu có)
+ *  · TỰ-BÙ: @tag nhúng trong chính chuỗi prompt (image/video)
+ * Bỏ tag không khớp asset. An toàn nếu rỗng.
+ */
+function linkAssetsFromTags(
+  projectId: number,
+  blockId: number,
+  declaredTags: string[] | undefined,
+  promptText: string
+): void {
+  const tags = new Set<string>()
+  for (const t of declaredTags ?? []) tags.add(t.replace(/^@/, '').toUpperCase())
+  for (const t of extractTags(promptText)) tags.add(t)
+  const ids = db.resolveTagsToAssetIds(projectId, [...tags])
+  db.linkBlockAssets(blockId, ids)
+}
 
 /** Ngữ cảnh chạy tool: buộc trong 1 dự án. */
 export interface ToolContext {
@@ -471,19 +491,27 @@ const writeImagePrompt: ToolDef = {
       properties: {
         scene_order: { type: 'number' },
         block_order: { type: 'number' },
-        image_prompt_en: { type: 'string' }
+        image_prompt_en: { type: 'string' },
+        associate_asset_tags: {
+          type: 'array',
+          description:
+            '⭐ Danh sách @tag nguyên liệu/biến thể block này DÙNG (không kèm @). App lưu bảng nối block↔asset để bước video/export biết đích danh ảnh tư liệu. Nếu bỏ trống, app tự trích @tag từ prompt.',
+          items: { type: 'string' }
+        }
       },
       required: ['scene_order', 'block_order', 'image_prompt_en']
     }
   },
   handler: (input, ctx) => {
     assertImagePrompt(input)
+    const promptText = input.image_prompt_en as string
     const id = db.upsertBlock(
       ctx.projectId,
       input.scene_order as number,
       input.block_order as number,
-      { image_prompt_en: input.image_prompt_en as string }
+      { image_prompt_en: promptText }
     )
+    linkAssetsFromTags(ctx.projectId, id, input.associate_asset_tags as string[] | undefined, promptText)
     return { block_id: id, ok: true }
   }
 }
@@ -492,20 +520,28 @@ const writeVideoPrompt: ToolDef = {
   schema: {
     name: 'write_video_prompt',
     description:
-      '⭐ Ghi prompt VIDEO cho 1 block: STYLE/SCENE/MOTION/AUDIO/CONSTRAINTS/NEGATIVE + TEXT_OVERLAY. STYLE = chất liệu (không thời đại). SCENE nhúng @tag. CONSTRAINTS = ràng buộc POSITIVE cho Seedance (sharp focus, five fingers, stable face...) — engine BytePlus đọc cái này thay negative. TEXT_OVERLAY = chữ CTA/giá tiếng Việt chính xác dán ở khâu dựng (trống nếu block không cần chữ). Target BytePlus.',
+      '⭐ Ghi prompt VIDEO cho 1 block. QUAN TRỌNG (image-to-video): ảnh GATE 2 của block này = KHUNG ĐẦU đã có sẵn nhân vật/bối cảnh/trang phục — prompt video chỉ LÀM ĐỘNG nó, KHÔNG dựng lại cảnh từ đầu. STYLE = chất liệu (không thời đại). SCENE = CHỈ tả thay đổi/diễn biến so với khung đầu, KHÔNG tả lại ngoại hình/bối cảnh/trang phục đã đứng yên trong ảnh; nhúng @tag. MOTION mang tải chính (camera + chuyển động chủ thể). CONSTRAINTS = ràng buộc POSITIVE cho Seedance (sharp focus, five fingers, stable face...) — engine BytePlus đọc cái này thay negative. TEXT_OVERLAY = chữ CTA/giá tiếng Việt chính xác dán ở khâu dựng (trống nếu block không cần chữ). Target BytePlus.',
     input_schema: {
       type: 'object',
       properties: {
         scene_order: { type: 'number' },
         block_order: { type: 'number' },
         style: { type: 'string' },
-        scene: { type: 'string' },
-        motion: { type: 'string' },
+        scene: {
+          type: 'string',
+          description:
+            'CHỈ mô tả CHUYỂN ĐỘNG & THAY ĐỔI diễn ra trong cảnh so với ẢNH KHUNG ĐẦU (GATE 2). CẤM tả lại nhân vật/bối cảnh/trang phục/đạo cụ đã đứng yên trong ảnh — chúng đã có sẵn. Ngắn gọn, nhường tải cho MOTION.'
+        },
+        motion: {
+          type: 'string',
+          description:
+            'Mang tải chính. Cho phép 1–3 shot (CUT-by-CUT) nối bằng "Cut to"/"Lens switch to" hoặc nhãn Shot 1/2/3, tối đa 3 cắt (mọi thể loại video); mỗi shot = 1 lens/FOV + 1 camera move + 1 subject beat, cùng khóa @tag để không drift. One-take → "No cuts throughout". Tả tư thế START→END cụ thể + 1 chi tiết vật lý (weight shift/uncoil/momentum); CẤM động từ mơ hồ (chạy/cầm/vung). Kèm degree adverb (slowly/explosively...).'
+        },
         audio: { type: 'string' },
         constraints: {
           type: 'string',
           description:
-            'Ràng buộc POSITIVE cho Seedance (câu khẳng định thay cho negative): sharp focus, five fingers, natural anatomy, stable face, consistent outfit within the scene...'
+            'Ràng buộc POSITIVE cho Seedance (câu khẳng định thay cho negative): sharp focus, five fingers, natural anatomy, stable face, consistent outfit within the scene... ⭐ THÊM 1 positive lock riêng block: nhắc lại danh tính @tag + vị trí + SỐ LƯỢNG vật/người (VD "exactly one bottle of @SERUM, label faces camera, @LAN stays on the left, 100% matches the reference").'
         },
         negative: { type: 'string' },
         text_overlay: {
@@ -541,6 +577,7 @@ const writeVideoPrompt: ToolDef = {
       input.block_order as number,
       { video_prompt_json: JSON.stringify(vp) }
     )
+    linkAssetsFromTags(ctx.projectId, id, tagNames, `${input.scene as string} ${input.motion as string}`)
     return { block_id: id, ok: true }
   }
 }
@@ -652,7 +689,7 @@ const deriveAssets: ToolDef = {
     description:
       '⭐ TÁCH nguyên liệu GỐC từ kịch bản (hàng loạt). Mỗi mục = 1 @tag: nhân vật (char) / bối cảnh (scene) / ' +
       'đạo cụ (prop) / sản phẩm (product). Chỉ tách thứ XUẤT HIỆN trong kịch bản, "thà thiếu còn hơn thừa". ' +
-      'Ghi gen_prompt luôn nếu đã dựng (prompt sinh ảnh gốc: char=4-view sheet, scene=multi-angle, prop=2×2). ' +
+      'Ghi gen_prompt luôn nếu đã dựng (prompt sinh ảnh gốc: char=4-view sheet, scene=1 ảnh sạch 1 góc KHÔNG người 16:9, prop=2×2). ' +
       'source=auto. Idempotent theo tag.',
     input_schema: {
       type: 'object',
@@ -695,7 +732,7 @@ const writeAssetPrompt: ToolDef = {
     description:
       '⭐ Ghi PROMPT SINH ẢNH (tiếng Anh) cho 1 nguyên liệu GỐC theo @tag (điểm dừng: người dùng copy prompt → Coco tạo ảnh → upload về). ' +
       'Công thức: char = character sheet 4 view (cận chân dung + chính diện 0° + nghiêng 90° + sau lưng 180°), nền trắng ngà #F8F4E8, mặt mộc, khai báo chiều cao + tỉ lệ đầu-thân. ' +
-      'scene = multi-angle từ 1 ảnh (toàn/trung/cận + góc khác), KHÔNG người. prop = lưới 2×2 (chính/nghiêng/sau/cận), không tay/người.',
+      'scene = 1 ảnh establishing SẠCH, MỘT góc đại diện, KHÔNG người, 16:9 (cần nhiều góc/địa điểm → tách asset scene riêng hoặc derivative angle, KHÔNG ghép nhiều góc trong 1 ảnh). prop = lưới 2×2 (chính/nghiêng/sau/cận), không tay/người.',
     input_schema: {
       type: 'object',
       properties: {

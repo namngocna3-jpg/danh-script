@@ -147,6 +147,12 @@ same character as @LAN, preserve face and outfit exactly, stable face, natural a
 
 > ⚠️ BytePlus/Dreamina **chặn khuôn mặt người thật nhận dạng được** ở một số chế độ — với chân dung thật, dựa vào ảnh tham chiếu @tag + để Coco xử eKYC/consent, đừng tả mặt danh tính bằng lời.
 
+**⭐ THE MAP TECHNIQUE — bố trí không gian bằng chữ (cảnh dễ "teleport").** Khi ≥2 vật/nhân vật cần vị trí cố định (Seedance hay dời vật lung tung), viết 1 dòng "bản đồ top-down bằng chữ" trong `scene`:
+```
+layout: @A center-left, @B background-right, @PROP foreground; keep these positions fixed throughout
+```
+Bản đồ ngôn ngữ ghim vị trí tốt hơn mười câu tả — "a map holds a location down". Camera move sau đó KHÔNG được phá vị trí đã khóa. Block đơn giản 1 chủ thể KHÔNG cần.
+
 ---
 
 ## 9 · NHẤT QUÁN TRANG PHỤC (lưu ý lớp B)

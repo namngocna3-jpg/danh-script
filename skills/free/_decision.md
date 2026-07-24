@@ -29,7 +29,7 @@ gate1d   scriptFinal    → NARRATION FINAL + quy hoạch shot mỗi cảnh (b�
    ▼ (chọn STYLE + tham số)
 director directorPlanner → QUY HOẠCH ĐẠO DIỄN: đếm thoại/chữ + chấm cảm xúc 0–10 + thiết kế chuyển cảnh (chỉ tách, không sáng tạo)
    ▼
-assets   assetDeriver   → ⭐NGUYÊN LIỆU: tách nhân vật/bối cảnh/đạo cụ TỪ kịch bản → sinh PROMPT tạo ảnh (char-sheet 4-view / scene multi-angle / prop 2×2) + biến thể + Color Script
+assets   assetDeriver   → ⭐NGUYÊN LIỆU: tách nhân vật/bối cảnh/đạo cụ TỪ kịch bản → sinh PROMPT tạo ảnh (char-sheet 4-view / scene 1 ảnh 1 góc sạch / prop 2×2) + biến thể + Color Script
    ▼ (người dùng copy prompt → Coco tạo ảnh → upload ảnh về)
 GATE 2   imgPrompter    → prompt ẢNH khung đầu (tiếng Anh) mỗi block, nhúng @tag nguyên liệu đã có
    ▼

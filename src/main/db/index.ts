@@ -322,6 +322,53 @@ export function coverageReport(projectId: number): {
   return { totalBlocks, scenesNoBlock, gaps }
 }
 
+// ---------------- Liên kết block ↔ asset (như o_assets2Storyboard Toonflow) ----------------
+
+/**
+ * Tra danh sách @tag → asset_id THẬT (kể cả biến thể phái sinh) trong 1 dự án.
+ * Bỏ tag không khớp asset nào. Không trùng id. Dùng để nối block↔asset.
+ */
+export function resolveTagsToAssetIds(projectId: number, tagNames: string[]): number[] {
+  const d = getDb()
+  const ids = new Set<number>()
+  for (const raw of tagNames) {
+    const tag = raw.replace(/^@/, '').trim()
+    if (!tag) continue
+    const row = d
+      .prepare(
+        `SELECT id FROM assets WHERE project_id = ? AND json_extract(variations_json,'$.tag') = ?`
+      )
+      .get(projectId, tag) as { id: number } | undefined
+    if (row) ids.add(row.id)
+  }
+  return [...ids]
+}
+
+/**
+ * Ghi liên kết 1 block → các asset nó dùng (thay toàn bộ link cũ của block).
+ * Bỏ qua an toàn nếu assetIds rỗng (không xóa link đang có — tránh mất khi agent không khai).
+ */
+export function linkBlockAssets(blockId: number, assetIds: number[]): void {
+  if (!assetIds.length) return
+  const d = getDb()
+  const ins = d.prepare(
+    'INSERT OR IGNORE INTO block_assets (block_id, asset_id) VALUES (?, ?)'
+  )
+  const tx = d.transaction(() => {
+    for (const aid of assetIds) ins.run(blockId, aid)
+  })
+  tx()
+}
+
+/** Danh sách asset_id 1 block đang dùng. */
+export function listBlockAssets(blockId: number): number[] {
+  const d = getDb()
+  const rows = d
+    .prepare('SELECT asset_id FROM block_assets WHERE block_id = ? ORDER BY asset_id')
+    .all(blockId) as Array<{ asset_id: number }>
+  return rows.map((r) => r.asset_id)
+}
+
 /** Lưu/cập nhật asset theo tag (unique trong dự án). Trả về asset.id. */
 export function saveAsset(
   projectId: number,

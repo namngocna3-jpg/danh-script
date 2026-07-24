@@ -90,6 +90,16 @@ CREATE TABLE IF NOT EXISTS plan_artifacts (
   UNIQUE(project_id, kind)
 );
 
+-- ⭐ Bảng nối block ↔ asset (như o_assets2Storyboard của Toonflow): 1 block (shot) dùng
+-- những nguyên liệu/biến thể NÀO. Lưu asset_id THẬT (kể cả biến thể phái sinh), không chỉ
+-- @tag trong text — để bước sinh video/export biết đích danh ảnh nguyên liệu của từng block.
+CREATE TABLE IF NOT EXISTS block_assets (
+  block_id INTEGER NOT NULL REFERENCES blocks(id) ON DELETE CASCADE,
+  asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+  PRIMARY KEY (block_id, asset_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_scenes_project ON scenes(project_id, order_idx);
 CREATE INDEX IF NOT EXISTS idx_blocks_scene   ON blocks(scene_id, order_idx);
 CREATE INDEX IF NOT EXISTS idx_assets_project ON assets(project_id);
+CREATE INDEX IF NOT EXISTS idx_block_assets_block ON block_assets(block_id);
