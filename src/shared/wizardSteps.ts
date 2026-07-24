@@ -31,6 +31,7 @@ export const WIZARD_STEPS = [
   { key: 'params', label: 'Style', confirmStage: 'gate_params' },
   { key: 'director', label: 'Đạo diễn', confirmStage: 'gate_director' },
   { key: 'assets', label: 'Nguyên liệu', confirmStage: 'gate_assets' },
+  { key: 'storyboard', label: '🎞️ Phân cảnh', confirmStage: 'gate_storyboard' },
   { key: 'gate2', label: 'Prompt ảnh', confirmStage: 'gate2_image' },
   { key: 'gate3', label: 'Prompt video', confirmStage: 'gate3_video' },
   { key: 'export', label: 'Xuất', confirmStage: 'gate4_export' }
@@ -51,10 +52,11 @@ const STAGE_ORDER: Stage[] = [
   'gate_params', // 5
   'gate_director', // 6
   'gate_assets', // 7
-  'gate2_image', // 8
-  'gate3_video', // 9
-  'gate4_export', // 10
-  'done' // 11
+  'gate_storyboard', // 8 — Phân cảnh chốt
+  'gate2_image', // 9
+  'gate3_video', // 10
+  'gate4_export', // 11
+  'done' // 12
 ]
 
 /**
@@ -102,6 +104,7 @@ export function stepConfirmed(stepKey: string, stage: string): boolean {
  * Quá gate3_video (đã tới xuất) → 'export'.
  */
 export function stepFromStage(stage: string): StepKey {
+  if (stageRank(stage) < 0) return 'prep' // G5: dự án mới (chưa chốt gì / stage lạ) dừng ở prep
   const next = stageRank(stage) + 1 // vị trí bước chưa chốt kế tiếp
   if (next >= STAGE_ORDER.length - 2) return 'export' // gate3_video xong / gate4_export / done
   const targetStage = STAGE_ORDER[next]
