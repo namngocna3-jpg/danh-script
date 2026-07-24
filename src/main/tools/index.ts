@@ -20,7 +20,8 @@ import {
   assertDirectorPlan,
   assertVideoPrompt,
   assertPlanShots,
-  assertImagePrompt
+  assertImagePrompt,
+  assertShotPanel
 } from './validators'
 import { scanCraft, readCraftFile } from '../core/craftRegistry'
 import { extractTags } from '../pipeline/tagGuard'
@@ -106,15 +107,18 @@ const readBlocks: ToolDef = {
       shot_desc: string | null
       image_prompt_en: string | null
       video_prompt: unknown
+      shot_panel: unknown
     }> = []
     for (const s of db.listScenes(ctx.projectId)) {
       for (const b of db.listBlocks(s.id)) {
+        const shotPanelJson = (b as { shot_panel_json?: string | null }).shot_panel_json
         out.push({
           scene_order: s.order_idx,
           block_order: b.order_idx,
           shot_desc: b.shot_desc ?? null,
           image_prompt_en: b.image_prompt_en ?? null,
-          video_prompt: b.video_prompt_json ? JSON.parse(b.video_prompt_json) : null
+          video_prompt: b.video_prompt_json ? JSON.parse(b.video_prompt_json) : null,
+          shot_panel: shotPanelJson ? JSON.parse(shotPanelJson) : null
         })
       }
     }
@@ -890,6 +894,92 @@ const readSkillFileTool: ToolDef = {
   }
 }
 
+// ---------------- Nhóm PHÂN CẢNH CHI TIẾT (shot panel — sau Nguyên liệu) ----------------
+
+const writeShotPanel: ToolDef = {
+  schema: {
+    name: 'write_shot_panel',
+    description:
+      'Ghi KHỐI PHÂN CẢNH CHI TIẾT cho từng shot của 1 cảnh (bước Phân cảnh, SAU Nguyên liệu). ' +
+      'Mỗi block = 1 shot: cỡ cảnh/góc/camera/Start→End+vật lý/duration≤8s/@tag. asset_tags trỏ @tag CÓ THẬT → tự ghi block_assets. ' +
+      'Không bịa @tag; duration mỗi shot ≤8s (điểm hỏng Seedance 5–8s).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        scene_order: { type: 'number', description: 'Thứ tự cảnh (order_idx).' },
+        blocks: {
+          type: 'array',
+          description: 'Mảng shot của cảnh này (mỗi phần tử 1 block/shot).',
+          items: {
+            type: 'object',
+            properties: {
+              block_order: { type: 'number', description: 'Thứ tự block trong cảnh (bắt đầu 1).' },
+              shot_size: { type: 'string', description: 'close-up | medium | wide | extreme wide...' },
+              camera_angle: { type: 'string', description: 'eye-level | low angle | high angle | over-shoulder...' },
+              camera_move: { type: 'string', description: 'static | pan left | dolly in | orbit...' },
+              subject: { type: 'string', description: 'Chủ thể + @tag dùng trong shot.' },
+              action_start: { type: 'string', description: 'Tư thế/trạng thái ĐẦU.' },
+              action_end: { type: 'string', description: 'Tư thế/trạng thái CUỐI + 1 chi tiết vật lý.' },
+              layout: { type: 'string', description: 'Map bố trí không gian khi ≥2 vật (tùy chọn).' },
+              cuts: { type: 'string', description: 'CUT-by-CUT nếu shot nhiều cắt (tùy chọn).' },
+              duration_sec: { type: 'number', description: 'Ước tính thời lượng shot, ≤8s.' },
+              asset_tags: {
+                type: 'array',
+                items: { type: 'string' },
+                description: '@tag nguyên liệu dùng trong shot (ghi vào block_assets).'
+              },
+              notes: { type: 'string', description: 'Ý đồ cảm xúc/ánh sáng của shot (tùy chọn).' }
+            },
+            required: [
+              'block_order',
+              'shot_size',
+              'camera_angle',
+              'camera_move',
+              'subject',
+              'action_start',
+              'action_end',
+              'duration_sec'
+            ]
+          }
+        }
+      },
+      required: ['scene_order', 'blocks']
+    }
+  },
+  handler: (input, ctx) => {
+    assertShotPanel(input)
+    const sceneOrder = input.scene_order as number
+    const blocks = input.blocks as Array<Record<string, unknown>>
+    for (const b of blocks) {
+      const blockOrder = b.block_order as number
+      const panel = {
+        shot_size: b.shot_size,
+        camera_angle: b.camera_angle,
+        camera_move: b.camera_move,
+        subject: b.subject,
+        action_start: b.action_start,
+        action_end: b.action_end,
+        layout: b.layout ?? null,
+        cuts: b.cuts ?? null,
+        duration_sec: b.duration_sec,
+        asset_tags: Array.isArray(b.asset_tags) ? b.asset_tags : [],
+        notes: b.notes ?? null
+      }
+      const id = db.upsertBlock(ctx.projectId, sceneOrder, blockOrder, {
+        shot_panel_json: JSON.stringify(panel)
+      })
+      // Gán @tag → block_assets (đúng pattern write_image_prompt/write_video_prompt:
+      // upsertBlock trả block.id → linkAssetsFromTags(projectId, blockId, tags, text)).
+      const declaredTags = (panel.asset_tags as unknown[]).map(String)
+      const panelText = [panel.subject, panel.action_start, panel.action_end, panel.layout, panel.cuts]
+        .filter(Boolean)
+        .join(' ')
+      linkAssetsFromTags(ctx.projectId, id, declaredTags, panelText)
+    }
+    return { ok: true, scene_order: sceneOrder, count: blocks.length }
+  }
+}
+
 // ---------------- Registry ----------------
 
 export const ALL_TOOLS: ToolDef[] = [
@@ -904,6 +994,7 @@ export const ALL_TOOLS: ToolDef[] = [
   writeSkeleton,
   writeAdaptation,
   planShots,
+  writeShotPanel,
   writeScript,
   saveAsset,
   writeImagePrompt,
