@@ -90,6 +90,7 @@ export function ExportPanel({ projectId }: { projectId: number }): JSX.Element {
       {/* Khung xương + chiến lược chuyển thể (nếu GATE 1 đã dựng) */}
       <PlanArtifactsView
         plan={{
+          brief: null,
           draft: null,
           skeleton: bundle.skeleton,
           adaptation: bundle.adaptation,

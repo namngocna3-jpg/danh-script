@@ -760,7 +760,18 @@ function loadPlanArtifact<T>(projectId: number, kind: PlanArtifactKind): T | nul
 
 /** Đọc toàn bộ artifact kế hoạch của dự án (cho tool read_plan / UI / export). */
 export function getPlanArtifacts(projectId: number): PlanArtifacts {
+  // Ý đồ chốt (GATE 0) sống trong projects.ideal_json.brief (không phải plan_artifacts).
+  let brief: IdealBrief | null = null
+  const p = getProject(projectId)
+  if (p?.ideal_json) {
+    try {
+      brief = (JSON.parse(p.ideal_json) as Ideal).brief ?? null
+    } catch {
+      brief = null
+    }
+  }
   return {
+    brief,
     draft: loadPlanArtifact<{ text: string }>(projectId, 'draft')?.text ?? null,
     skeleton: loadPlanArtifact<StorySkeleton>(projectId, 'skeleton'),
     adaptation: loadPlanArtifact<AdaptationStrategy>(projectId, 'adaptation'),

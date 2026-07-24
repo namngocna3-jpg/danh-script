@@ -64,8 +64,11 @@ const GATE_STAGE: Record<GateId, string> = {
   gate1: 'gate1_script' // legacy
 }
 
-/** Các stage kịch bản có khung xương/chiến lược để hiển thị (nạp lại plan sau mỗi lượt chat). */
+/** Các stage kịch bản có artifact để hiển thị ở cột phải (nạp lại plan sau mỗi lượt chat).
+ *  gate0_ideal (brief) + gate1a_draft (draft) cũng đọc qua getPlanArtifacts nên phải nạp. */
 const PLAN_STAGES: ReadonlySet<string> = new Set([
+  'gate0_ideal',
+  'gate1a_draft',
   'gate1b_skeleton',
   'gate1c_adaptation',
   'gate1d_script',

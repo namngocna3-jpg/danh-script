@@ -373,6 +373,7 @@ export interface ExportBundle {
 
 /** Gói artifact tiền-kịch-bản + đạo diễn + hệ thị giác (đọc cho UI/export). */
 export interface PlanArtifacts {
+  brief: IdealBrief | null // ⭐ ý đồ chốt (GATE 0) — đọc từ ideal_json.brief
   draft: string | null // ⭐ kịch bản nháp (chốt hướng, gate1a)
   skeleton: StorySkeleton | null
   adaptation: AdaptationStrategy | null

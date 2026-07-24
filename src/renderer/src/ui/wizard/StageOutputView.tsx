@@ -14,8 +14,8 @@ import { useWizard } from '../../wizardStore'
 
 /**
  * PANEL OUTPUT theo bước — render trọn vẹn kết quả hiện tại của từng stage ở CỘT PHẢI.
- * Đọc data từ store (useWizard): plan (draft/skeleton/adaptation/director/visualSystem),
- * assetsFull, visualSystem, gate0Result. Mỗi nhánh thiếu data → hiển thị gọn ("Chưa có"),
+ * Đọc data từ store (useWizard): plan (brief/draft/skeleton/adaptation/director/visualSystem),
+ * assetsFull, visualSystem. Mỗi nhánh thiếu data → hiển thị gọn ("Chưa có"),
  * KHÔNG crash. Tái dùng logic hiển thị từ PlanArtifactsView / AssetStudioPanel / DirectorPanel.
  *
  * ⚠️ Store hiện KHÔNG expose blocks/shot_panel_json ra renderer (chỉ có gate.plan + assets2.*),
@@ -25,15 +25,14 @@ export function StageOutputView({ stage }: { stage: ChatGateStage }): JSX.Elemen
   const plan = useWizard((s) => s.plan)
   const assetsFull = useWizard((s) => s.assetsFull)
   const visualSystem = useWizard((s) => s.visualSystem)
-  const gate0Result = useWizard((s) => s.gate0Result)
 
   switch (stage) {
-    // Ý đồ chốt (GATE 0)
+    // Ý đồ chốt (GATE 0) — đọc từ plan.brief (ideal_json.brief), khớp luồng chat gộp.
     case 'gate0_ideal':
       return (
         <Section title="🎯 Ý đồ chốt">
-          {gate0Result?.brief ? (
-            <IdealBriefView brief={gate0Result.brief} />
+          {plan?.brief ? (
+            <IdealBriefView brief={plan.brief} />
           ) : (
             <Empty>Chưa có ý đồ. Nhắn trợ lý bên trái để làm rõ ý đồ đầu ra.</Empty>
           )}
