@@ -28,6 +28,7 @@ Mỗi thợ có "Khung output bắt buộc" trong skill. **Nếu bỏ TRỐNG m�
 - **gate1d_script / gate1_script**: mỗi cảnh có bối cảnh + narration + ≥1 shot.
 - **gate_director**: mỗi cảnh có đếm thoại + chấm cảm xúc 0–10 + (chuyển cảnh nơi cần).
 - **gate_assets**: mỗi asset gốc có prompt + Color Script có mốc màu.
+- **gate_storyboard**: mỗi cảnh chia ≥1 shot; mỗi shot có cỡ cảnh · góc · camera move · action_start→action_end · duration ≤8s · @tag.
 - **gate2_image / gate3_video**: mỗi block đã quy hoạch có prompt.
 
 ## ⭐ PHANH Ý ĐỒ ĐẦU RA (phạt CTA sai hướng — 2 CHIỀU)
@@ -75,6 +76,8 @@ Mỗi thợ có "Khung output bắt buộc" trong skill. **Nếu bỏ TRỐNG m�
 **gate_director — phân tích có trung thực không:** đếm thoại có khớp narration thật? intensity có ARC (cao trào cao nhất)? nền cảm xúc cụ thể (không "buồn" rỗng)? chuyển cảnh chỉ đặt nơi cần?
 
 **gate_assets — prompt có tạo được ảnh dùng ngay không:** char có 4-view + tỉ lệ đầu-thân + nền chuẩn? scene 1 ảnh 1 góc sạch không người (KHÔNG ghép grid)? Color Script có ARC màu bám cảm xúc? số phái sinh "thà thiếu hơn thừa"? ⭐ **KHÔNG phạt** biến thể close-up mặt sạch của char chính (`clean single-face close-up`) — đó là ref khóa mặt cho VIDEO, có công dụng rõ, không tính là phái sinh thừa.
+
+**gate_storyboard — phân cảnh có bám ảnh/video được không:** mỗi cảnh chia shot hợp lý (số shot khớp ý đồ đạo diễn)? mỗi shot có action_start→action_end cụ thể (+chi tiết vật lý, KHÔNG động từ mơ hồ) → 🟡 nếu mơ hồ. duration mỗi shot ≤8s (Seedance hỏng 5–8s)? @tag trỏ asset CÓ THẬT (không mồ côi)? cỡ cảnh/góc/camera đủ để bước sau dựng prompt không bịa?
 
 **gate2_image / gate3_video — prompt có đúng nghề không:** cấu trúc 3 đoạn/6-phần đúng tỉ lệ (Hình DÀI nhất, Style NGẮN nhất)? @tag nhúng đủ chỗ tên nhân vật/đạo cụ? image-to-video chỉ tả thay đổi (không tả lại vật đứng yên)? không từ làm mờ ảnh (film grain/imperfect focus)?
 - ⭐ **POSITIVE LOCK per-block:** block tái dùng nhân vật/sản phẩm → `constraints` có 1 câu khóa riêng nhắc lại danh tính @tag + vị trí + SỐ LƯỢNG? Thiếu = 🟡.
