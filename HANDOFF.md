@@ -21,8 +21,9 @@
 
 **Kiến trúc 3 tầng agent:** Sếp (Decision) → Thợ (Execution, system = skill.md) → Reviewer (Supervision, chấm A/B/C/D).
 
-**Pipeline stage (thứ tự):**
-`gate0_ideal` (ý đồ) → `gate1a_draft` (nháp) → `gate1b_skeleton` (khung xương) → `gate1c_adaptation` (chuyển thể) → `gate1d_script` (kịch bản final = **tạo cảnh + bối cảnh + shot** ở ĐÂY) → `gate_director` (đạo diễn) → `gate_assets` (nguyên liệu + @tag + prompt ảnh-asset) → `gate2_image` (prompt ảnh block) → `gate3_video` (prompt video block) → `gate4_export`.
+**Pipeline stage (thứ tự MỚI — bottom-up, đảo Ý đồ xuống SAU Nháp):**
+`gate1a_draft` (nháp — BƯỚC ĐẦU, đọc ý tưởng thô) → `gate0_ideal` (ý đồ — chưng cất TỪ nháp) → `gate1b_skeleton` (khung xương) → `gate1c_adaptation` (chuyển thể) → `gate1d_script` (kịch bản final = **tạo cảnh + bối cảnh + shot** ở ĐÂY) → `gate_params` (style) → `gate_director` (đạo diễn) → `gate_assets` (nguyên liệu + @tag + prompt ảnh-asset) → `gate2_image` (prompt ảnh block) → `gate3_video` (prompt video block) → `gate4_export`.
+> Thứ tự + luật khóa step nằm TRỌN ở `src/shared/wizardSteps.ts` (nguồn duy nhất). Khóa step: mở bước ≤ (bậc stage đã chốt + 1) — khóa tương lai, mở quá khứ. `updateProjectStage` monotonic (chỉ tiến).
 
 **Mục tiêu nâng cấp:** làm output **sâu bằng Toonflow** + **liên kết bước bằng đọc toàn văn** + **reviewer khắt khe**. KHÔNG bê khái niệm phân tập tiểu thuyết TQ (付费卡点/股价级反转). Giữ triết lý "dừng ở prompt".
 

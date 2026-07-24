@@ -10,6 +10,7 @@ import {
   getProject,
   deleteProject,
   updateProjectParams,
+  updateProjectStage,
   getPlanArtifacts,
   listAssetsFull,
   assetCoverage
@@ -215,6 +216,8 @@ export function registerIpc(): void {
     async (_e, projectId: number, params: ProjectParams) => {
       try {
         updateProjectParams(projectId, JSON.stringify(params), params.style_id)
+        // GATE Style là bước gating → GHI stage để khóa step tiến đúng (monotonic).
+        updateProjectStage(projectId, 'gate_params')
         return ok(true)
       } catch (err) {
         return fail(err)
