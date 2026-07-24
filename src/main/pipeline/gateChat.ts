@@ -130,14 +130,26 @@ const CHAT_GATES: Record<string, ChatGateSpec> = {
       '④ write_visual_system — Color Script (tone màu từng cảnh) + ánh sáng + chất liệu toàn phim.\n' +
       'Người dùng sẽ copy prompt sang Coco tạo ảnh rồi upload về — nên prompt phải đủ để tạo ảnh ngay. Cuối cùng gọi read_asset_coverage để soát asset nào còn thiếu prompt.'
   },
+  // ── PHÂN CẢNH (shot_panel) — chia cảnh thành shot + điền khối phân cảnh ──
+  gate_storyboard: {
+    worker: 'storyboardWright',
+    tools: [...READ_TOOLS, 'read_script_full', 'write_shot_panel'],
+    layers: workerSpec('storyboardWright').layers,
+    kickoff:
+      'Người dùng vừa mở cổng PHÂN CẢNH. BƯỚC 0 (đọc-trước-khi-làm): đọc read_plan (khung xương/chuyển thể/đạo diễn/hệ thị giác) + read_script_full (toàn văn narration) + read_scenes (bối cảnh riêng cảnh) + read_assets (@tag đã có). ' +
+      'CẤM bịa nhân vật/bối cảnh/đạo cụ không có trong kịch bản; @tag phải trỏ asset CÓ THẬT. Sau đó chào ngắn. ' +
+      'Rồi với MỖI cảnh (order_idx tăng dần) → chia 1..n shot; mỗi shot điền khối phân cảnh: shot_size · camera_angle · camera_move · subject(@tag) · action_start→action_end (+1 chi tiết vật lý, cấm động từ mơ hồ) · duration_sec ≤8 · asset_tags. ' +
+      'Ghi qua write_shot_panel(scene_order, blocks[]) cho từng cảnh. Hỏi nếu còn phân vân số shot 1 cảnh.'
+  },
   gate2_image: {
     worker: 'imgPrompter',
     tools: [...READ_TOOLS, 'read_coverage', 'save_asset', 'write_image_prompt'],
     layers: workerSpec('imgPrompter').layers,
     kickoff:
-      'Người dùng vừa mở cổng PROMPT ẢNH. BƯỚC 0 (đọc-trước-khi-làm): đọc read_ideal + read_plan (hệ thị giác/Color Script) + read_scenes + read_blocks (shot đã quy hoạch) + read_assets (@tag đã có). ' +
+      'Người dùng vừa mở cổng PROMPT ẢNH. BƯỚC 0 (đọc-trước-khi-làm): đọc read_ideal + read_plan (hệ thị giác/Color Script) + read_scenes + read_blocks (KHỐI PHÂN CẢNH shot_panel: cỡ cảnh/góc/camera/Start→End/@tag đã dựng ở bước Phân cảnh) + read_assets (@tag đã có). ' +
       'CẤM bịa asset/@tag không có trong sổ — chỉ nhúng @tag đã tồn tại; thiếu tiền đề thì báo. Sau đó chào ngắn, ' +
       'rồi dựng prompt ảnh khung đầu (tiếng Anh, 3 đoạn, nhúng @tag) cho MỖI block đã có shot_desc. ' +
+      'Bám KHỐI PHÂN CẢNH (shot_panel) của mỗi block — KHÔNG bịa lại cỡ cảnh/góc/hành động. ' +
       'Cuối cùng gọi read_coverage để chắc KHÔNG block nào thiếu ảnh. Hỏi nếu còn điểm chưa rõ.'
   },
   gate3_video: {
@@ -145,8 +157,9 @@ const CHAT_GATES: Record<string, ChatGateSpec> = {
     tools: [...READ_TOOLS, 'read_coverage', 'write_video_prompt'],
     layers: workerSpec('vidPrompter').layers,
     kickoff:
-      'Người dùng vừa mở cổng PROMPT VIDEO. BƯỚC 0 (đọc-trước-khi-làm): đọc ideal + block đã có prompt ẢNH KHUNG ĐẦU GATE 2 (read_blocks) + @tag (read_assets); CẤM bịa block/asset không có trong sổ. ' +
+      'Người dùng vừa mở cổng PROMPT VIDEO. BƯỚC 0 (đọc-trước-khi-làm): đọc ideal + read_blocks (KHỐI PHÂN CẢNH shot_panel: camera_move/shot_size/action_start→action_end + image_prompt_en đã có prompt ẢNH KHUNG ĐẦU GATE 2) + @tag (read_assets); CẤM bịa block/asset không có trong sổ. ' +
       'LUẬT VÀNG image-to-video: mỗi block ĐÃ CÓ ảnh khung đầu (nhân vật/bối cảnh/trang phục/đạo cụ đã đứng yên trong ảnh) → prompt video CHỈ LÀM ĐỘNG ảnh đó, CẤM tả lại ngoại hình/bối cảnh/trang phục. SCENE ngắn (chỉ thay đổi/diễn biến), MOTION mang tải chính. ' +
+      'MOTION bám action_start→action_end trong shot_panel; camera bám camera_move/shot_size đã chốt. ' +
       'MULTI-SHOT (mọi thể loại): block được 1–3 shot (CUT-by-CUT) cắt bằng "Cut to"/"Lens switch to", mỗi shot khóa lại @tag để không drift; MOTION tả tư thế START→END + chi tiết vật lý (cấm động từ mơ hồ); CONSTRAINTS thêm 1 positive lock riêng block (danh tính @tag + vị trí + số lượng). ' +
       'Chào ngắn rồi dựng prompt video (STYLE/SCENE/MOTION/AUDIO/CONSTRAINTS + TEXT_OVERLAY nếu cần) cho MỖI block. ' +
       'Cuối cùng gọi read_coverage để chắc KHÔNG block nào thiếu video. Hỏi nếu chưa rõ.'
