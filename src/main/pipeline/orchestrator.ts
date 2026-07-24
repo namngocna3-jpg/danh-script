@@ -20,6 +20,7 @@ const GATE_MAP: Record<string, string> = {
   gate1d: 'gate1d_script',
   director: 'gate_director',
   assets: 'gate_assets',
+  storyboard: 'gate_storyboard',
   gate2: 'gate2_image',
   gate3: 'gate3_video'
 }
@@ -45,7 +46,7 @@ function orchestratorTools(projectId: number, onStep?: (s: AgentStep) => void): 
         'Giao 1 CỔNG cho thợ con làm (thợ tự dựng cảnh/kịch bản/prompt và ghi DB). ' +
         'THỨ TỰ CHẠY (bottom-up): gate1a (nháp — BƯỚC ĐẦU, đọc ý tưởng thô) → gate0 (chốt ý đồ TỪ nháp — KHÔNG tạo cảnh/@tag) → ' +
         'gate1b (khung xương) → gate1c (chuyển thể) → gate1d (kịch bản final) → director (quy hoạch đạo diễn) → assets (nguyên liệu) → ' +
-        'gate2 (prompt ảnh) → gate3 (prompt video). ' +
+        'storyboard (bảng phân cảnh) → gate2 (prompt ảnh) → gate3 (prompt video). ' +
         'instruction = lệnh NGẮN (≤100 chữ) nói LÀM GÌ, không nói làm thế nào. ' +
         'Trả về lời xác nhận ngắn của thợ — KHÔNG in lại toàn bộ nội dung.',
       input_schema: {
