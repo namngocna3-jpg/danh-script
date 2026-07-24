@@ -113,3 +113,42 @@ export function assertImagePrompt(input: Record<string, unknown>): void {
     throw new Error('write_image_prompt: thiếu "image_prompt_en" (prompt ảnh tiếng Anh, KHÔNG rỗng).')
   }
 }
+
+/** write_shot_panel: scene_order số; blocks mảng không rỗng; mỗi block có block_order≥1 + shot_size/camera_angle/camera_move/subject/action_start/action_end + duration_sec là SỐ ≤8. */
+export function assertShotPanel(input: Record<string, unknown>): void {
+  if (!isFiniteNumber(input.scene_order)) {
+    throw new Error('write_shot_panel: thiếu "scene_order" là SỐ thứ tự cảnh.')
+  }
+  const blocks = input.blocks
+  if (!Array.isArray(blocks) || blocks.length === 0) {
+    throw new Error('write_shot_panel: "blocks" phải là mảng shot KHÔNG rỗng (mỗi cảnh ≥1 shot).')
+  }
+  blocks.forEach((b, i) => {
+    const bl = b as Record<string, unknown>
+    const at = `shot #${i + 1}`
+    if (!isFiniteNumber(bl.block_order) || (bl.block_order as number) < 1) {
+      throw new Error(`write_shot_panel: ${at} "block_order" phải là SỐ ≥ 1.`)
+    }
+    if (!isNonEmptyString(bl.shot_size)) {
+      throw new Error(`write_shot_panel: ${at} thiếu "shot_size" (close-up/medium/wide...).`)
+    }
+    if (!isNonEmptyString(bl.camera_angle)) {
+      throw new Error(`write_shot_panel: ${at} thiếu "camera_angle" (eye-level/low/high/over-shoulder...).`)
+    }
+    if (!isNonEmptyString(bl.camera_move)) {
+      throw new Error(`write_shot_panel: ${at} thiếu "camera_move" (static/pan/dolly/orbit...).`)
+    }
+    if (!isNonEmptyString(bl.subject)) {
+      throw new Error(`write_shot_panel: ${at} thiếu "subject" (chủ thể + @tag dùng trong shot).`)
+    }
+    if (!isNonEmptyString(bl.action_start)) {
+      throw new Error(`write_shot_panel: ${at} thiếu "action_start" (tư thế/trạng thái ĐẦU).`)
+    }
+    if (!isNonEmptyString(bl.action_end)) {
+      throw new Error(`write_shot_panel: ${at} thiếu "action_end" (tư thế/trạng thái CUỐI + 1 chi tiết vật lý).`)
+    }
+    if (!isFiniteNumber(bl.duration_sec) || (bl.duration_sec as number) <= 0 || (bl.duration_sec as number) > 8) {
+      throw new Error(`write_shot_panel: ${at} "duration_sec" phải là SỐ trong (0, 8] (Seedance hỏng ở 5–8s → mỗi shot ≤8s).`)
+    }
+  })
+}
