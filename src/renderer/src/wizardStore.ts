@@ -35,6 +35,7 @@ export type GateId =
   | 'gate1d'
   | 'director'
   | 'assets'
+  | 'storyboard'
   | 'gate2'
   | 'gate3'
   | 'gate1' // legacy (kịch bản 1 cục)
@@ -57,6 +58,7 @@ const GATE_STAGE: Record<GateId, string> = {
   gate1d: 'gate1d_script',
   director: 'gate_director',
   assets: 'gate_assets',
+  storyboard: 'gate_storyboard',
   gate2: 'gate2_image',
   gate3: 'gate3_video',
   gate1: 'gate1_script' // legacy
@@ -283,6 +285,8 @@ export const useWizard = create<WizardState>((set, get) => ({
         if (PLAN_STAGES.has(stage)) void get().loadPlan(projectId)
         // Cổng nguyên liệu vừa chạy → asset/prompt/Color Script có thể đã đổi, nạp lại.
         if (stage === 'gate_assets') void get().loadAssets(projectId)
+        // Cổng phân cảnh vừa chạy → block/shot_panel + độ phủ block đã đổi, nạp lại.
+        if (stage === 'gate_storyboard') void get().loadAssets(projectId)
       } else {
         set({ wizardError: res.error, chatBusy: null })
       }
