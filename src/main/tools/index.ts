@@ -839,7 +839,7 @@ const readSkillFileTool: ToolDef = {
     name: 'read_skill_file',
     description:
       'Đọc TOÀN VĂN 1 craft trong kho theo path (VD "styles/2d_flat_design/craft.md" hoặc ' +
-      '"genres/sales-affiliate-review.md" hoặc "craft/skeleton-craft.md"). Chỉ đọc file .md trong skills/.',
+      '"genres/sales-affiliate-review.md" hoặc "craft/skeleton-beats.md"). Chỉ đọc file .md trong skills/.',
     input_schema: {
       type: 'object',
       properties: { path: { type: 'string', description: 'Đường dẫn tương đối trong skills/' } },
