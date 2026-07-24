@@ -68,6 +68,11 @@ function migrate(d: Database.Database): void {
     d.exec('ALTER TABLE blocks ADD COLUMN shot_desc TEXT')
   }
 
+  const blockCols2 = d.prepare('PRAGMA table_info(blocks)').all() as Array<{ name: string }>
+  if (!blockCols2.some((c) => c.name === 'shot_panel_json')) {
+    d.exec('ALTER TABLE blocks ADD COLUMN shot_panel_json TEXT')
+  }
+
   // reviews vốn chỉ có block_id; thêm project_id + gate_stage để lưu review THEO CỔNG (Pha 4).
   const reviewCols = d.prepare('PRAGMA table_info(reviews)').all() as Array<{ name: string }>
   if (!reviewCols.some((c) => c.name === 'project_id')) {

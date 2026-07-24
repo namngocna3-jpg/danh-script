@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS blocks (
   shot_desc        TEXT,                  -- ⭐ ý đồ shot (quy hoạch TRƯỚC ở GATE 1): góc/hành động/nội dung khung — để img/vid bám, chống block trống
   image_prompt_en  TEXT,
   video_prompt_json TEXT,
+  shot_panel_json  TEXT,                  -- ⭐ khối phân cảnh CHI TIẾT (bước Phân cảnh): cỡ cảnh/góc/camera/Start→End/duration/@tag
   rendered_bool    INTEGER NOT NULL DEFAULT 0
 );
 
