@@ -3,10 +3,9 @@ import type { ChatGateStage } from '@shared/types'
 import { useWizard, stageHasPlan, type GateId } from '../../wizardStore'
 import { StepStream } from './StepStream'
 import { ReviewBadge } from './ReviewBadge'
-import { PlanArtifactsView } from './PlanArtifactsView'
 import { Markdown } from './Markdown'
 
-interface Props {
+export interface GateChatPanelProps {
   projectId: number
   stage: ChatGateStage
   gateId: GateId // để map kiểm duyệt A/B/C/D
@@ -26,7 +25,7 @@ export function GateChatPanel({
   title,
   desc,
   onDone
-}: Props): JSX.Element {
+}: GateChatPanelProps): JSX.Element {
   const chats = useWizard((s) => s.chats[stage])
   const chatBusy = useWizard((s) => s.chatBusy)
   const steps = useWizard((s) => s.steps)
@@ -37,7 +36,6 @@ export function GateChatPanel({
   const confirmGate = useWizard((s) => s.confirmGate)
   const doReview = useWizard((s) => s.review)
   const loadPlan = useWizard((s) => s.loadPlan)
-  const plan = useWizard((s) => s.plan)
   const wizardError = useWizard((s) => s.wizardError)
   const clearError = useWizard((s) => s.clearError)
 
@@ -115,9 +113,6 @@ export function GateChatPanel({
         )}
         <div ref={bottomRef} />
       </div>
-
-      {/* Khung xương + chiến lược chuyển thể (các bước kịch bản) */}
-      {stageHasPlan(stage) && <PlanArtifactsView plan={plan} />}
 
       {/* Ô nhập */}
       <div className="flex items-end gap-2">
