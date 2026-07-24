@@ -13,21 +13,26 @@ export interface WizardStepDef {
   key: string
   label: string
   /**
-   * Stage được GHI vào DB khi người dùng chốt xong bước này.
-   * null = bước phụ trợ (auto/prep) — không tính vào khóa tuần tự.
+   * Stage được GHI vào DB khi người dùng chốt xong bước này (dùng cho dấu ✓ +
+   * khóa bước SAU). null = bước phụ trợ (auto/prep) — không tính vào khóa tuần tự.
    */
   confirmStage: Stage | null
+  /**
+   * Stage tối thiểu để MỞ (bấm được) bước này. Mặc định = confirmStage.
+   * Chỉ cần cho MÀN GỘP (vd 'script' gom gate1a→gate1d): mở sớm ở sub-stage đầu
+   * (gate1a_draft) nhưng chỉ ✓ done khi chốt sub-stage cuối (gate1d_script).
+   */
+  unlockStage?: Stage
 }
 
 /** Danh sách bước theo ĐÚNG thứ tự hiển thị + thứ tự chạy. */
 export const WIZARD_STEPS = [
   { key: 'auto', label: '🤖 Tự động', confirmStage: null },
   { key: 'prep', label: 'Chuẩn bị', confirmStage: null },
-  { key: 'draft', label: 'Nháp', confirmStage: 'gate1a_draft' },
-  { key: 'gate0', label: 'Ý đồ', confirmStage: 'gate0_ideal' },
-  { key: 'skeleton', label: 'Khung xương', confirmStage: 'gate1b_skeleton' },
-  { key: 'adaptation', label: 'Chuyển thể', confirmStage: 'gate1c_adaptation' },
-  { key: 'script', label: 'Kịch bản', confirmStage: 'gate1d_script' },
+  // Màn GỘP: 5 bước kịch bản cũ (Nháp→Ý đồ→Khung xương→Chuyển thể→Final) nay là
+  // 5 TAB trong ScriptWorkbench. Stepper ngoài chỉ còn 1 nút. Mở sớm từ gate1a_draft
+  // (để vào ngay sau prep), ✓ done khi chốt gate1d_script (tab Final).
+  { key: 'script', label: 'Kịch bản', confirmStage: 'gate1d_script', unlockStage: 'gate1a_draft' },
   { key: 'params', label: 'Style', confirmStage: 'gate_params' },
   { key: 'director', label: 'Đạo diễn', confirmStage: 'gate_director' },
   { key: 'assets', label: 'Nguyên liệu', confirmStage: 'gate_assets' },
@@ -69,10 +74,16 @@ export function stageRank(stage: string): number {
   return STAGE_ORDER.indexOf(stage as Stage) // -1 nếu không thấy (gồm 'draft')
 }
 
-/** Vị trí bước gating trong STAGE_ORDER (bước phụ trợ → -1). */
+/** Vị trí "chốt" của bước gating trong STAGE_ORDER (bước phụ trợ → -1). */
 function stepPosition(def: WizardStepDef): number {
   if (def.confirmStage === null) return -1
   return STAGE_ORDER.indexOf(def.confirmStage)
+}
+
+/** Vị trí "mở khóa" — mặc định = vị trí chốt; màn gộp mở sớm hơn qua unlockStage. */
+function unlockPosition(def: WizardStepDef): number {
+  if (def.unlockStage) return STAGE_ORDER.indexOf(def.unlockStage)
+  return stepPosition(def)
 }
 
 /**
@@ -85,7 +96,7 @@ function stepPosition(def: WizardStepDef): number {
 export function stepUnlocked(stepKey: string, stage: string): boolean {
   const def = WIZARD_STEPS.find((s) => s.key === stepKey)
   if (!def) return false
-  const pos = stepPosition(def)
+  const pos = unlockPosition(def)
   if (pos < 0) return true // auto/prep
   return pos <= stageRank(stage) + 1
 }
@@ -107,7 +118,11 @@ export function stepFromStage(stage: string): StepKey {
   if (stageRank(stage) < 0) return 'prep' // G5: dự án mới (chưa chốt gì / stage lạ) dừng ở prep
   const next = stageRank(stage) + 1 // vị trí bước chưa chốt kế tiếp
   if (next >= STAGE_ORDER.length - 2) return 'export' // gate3_video xong / gate4_export / done
-  const targetStage = STAGE_ORDER[next]
-  const def = WIZARD_STEPS.find((s) => s.confirmStage === targetStage)
-  return (def?.key ?? 'draft') as StepKey
+  // Bước phủ vị trí `next`: khoảng [unlock..confirm] chứa `next`. Màn GỘP 'script'
+  // phủ gate1a→gate1d, nên mọi sub-stage kịch bản đều route về 'script' (không còn
+  // key mồ côi draft/gate0/skeleton/adaptation gây màn trắng khi mở lại DB).
+  const def = WIZARD_STEPS.find(
+    (s) => s.confirmStage !== null && unlockPosition(s) <= next && next <= stepPosition(s)
+  )
+  return (def?.key ?? 'script') as StepKey
 }
