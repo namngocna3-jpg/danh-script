@@ -14,3 +14,6 @@ portable/
 
 # API key / cài đặt máy (an toàn — key lưu ở userData ngoài repo)
 settings.json
+
+# Cache tool impeccable (không thuộc dự án)
+.impeccable/
