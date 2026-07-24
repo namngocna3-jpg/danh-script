@@ -27,6 +27,7 @@ import type {
   AssetCoverage,
   DeriveKind
 } from '../../shared/types'
+import { stageRank } from '../../shared/wizardSteps'
 
 /** Chuẩn hóa type asset (DB cũ có thể chứa giá trị lạ) về 1 role hợp lệ. */
 function toRole(type: string | null | undefined): AssetRole {
@@ -147,7 +148,17 @@ export function deleteProject(id: number): void {
   getDb().prepare('DELETE FROM projects WHERE id = ?').run(id)
 }
 
+/**
+ * Ghi stage đã chốt — MONOTONIC: chỉ tiến, không lùi.
+ * Vì luật khóa cho phép "quay lại sửa bước đã xong rồi chốt lại"; nếu ghi đè
+ * thẳng thì stage sẽ TỤT về bước cũ → khóa lại các bước đã mở. So bậc bằng
+ * stageRank (nguồn thứ tự duy nhất ở @shared/wizardSteps) rồi chỉ ghi khi tiến.
+ */
 export function updateProjectStage(id: number, stage: string): void {
+  const row = getDb().prepare('SELECT stage FROM projects WHERE id = ?').get(id) as
+    | { stage: string }
+    | undefined
+  if (row && stageRank(stage) <= stageRank(row.stage)) return // chốt lại bước cũ → giữ nguyên tiến độ
   getDb().prepare('UPDATE projects SET stage = ? WHERE id = ?').run(stage, id)
 }
 

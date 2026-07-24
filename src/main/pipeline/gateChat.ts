@@ -41,13 +41,14 @@ const READ_TOOLS = ['read_ideal', 'read_scenes', 'read_blocks', 'read_assets', '
 const CHAT_GATES: Record<string, ChatGateSpec> = {
   gate0_ideal: {
     worker: 'ideaAnalyst',
-    tools: ['read_ideal', 'write_ideal_brief'],
+    tools: ['read_ideal', 'read_draft', 'write_ideal_brief'],
     layers: [],
     kickoff:
-      'Người dùng vừa mở cổng Ý ĐỒ. Hãy chào ngắn, đọc ideal (read_ideal), rồi LÀM RÕ & CHỐT Ý ĐỒ — ' +
+      'Người dùng vừa mở cổng Ý ĐỒ (SAU khi đã chốt bản NHÁP). BƯỚC 1 BẮT BUỘC: gọi read_draft để đọc TOÀN VĂN bản nháp vừa chốt + read_ideal để xem ý tưởng thô gốc. ' +
+      'Rồi CHƯNG CẤT Ý ĐỒ CỐT LÕI TỪ CHÍNH BẢN NHÁP (bottom-up — nháp đã cho thấy hướng, giờ gọi tên ý đồ): ' +
       'CHƯA phân cảnh, CHƯA tạo @tag. Ghi "Ý đồ chốt" qua write_ideal_brief: thông điệp lõi (1 câu) · ' +
       'đối tượng + chân dung · góc cảm xúc + đường cong · tông/mood tổng · thể loại gợi ý · độ dài dự kiến. ' +
-      'Nếu ideal mơ hồ thì HỎI 1–2 câu quan trọng nhất trước khi chốt. Việc phân cảnh sẽ làm ở bước Kịch bản.'
+      'Nếu nháp còn chỗ ý đồ mập mờ thì HỎI 1–2 câu quan trọng nhất trước khi chốt. Phân cảnh làm ở bước Khung xương/Kịch bản.'
   },
   // ── KỊCH BẢN tách 4 bước chat độc lập (mô hình Toonflow) ──
   gate1a_draft: {
@@ -55,9 +56,9 @@ const CHAT_GATES: Record<string, ChatGateSpec> = {
     tools: [...READ_TOOLS, 'write_draft', 'read_draft'],
     layers: ['storyboard-craft.md'],
     kickoff:
-      'Người dùng vừa mở cổng NHÁP KỊCH BẢN. BƯỚC 1 BẮT BUỘC: gọi read_ideal để đọc TOÀN VĂN ideal + Ý ĐỒ CHỐT (thông điệp lõi · đối tượng · góc cảm xúc · mood · thể loại · độ dài) đã chốt ở GATE 0. ' +
-      'Rồi viết 1 bản KỊCH BẢN NHÁP gọn (mạch kể + tinh thần từng đoạn, CHƯA cần lời thoại chỉn chu, CHƯA phân cảnh cứng) để CHỐT HƯỚNG với người dùng — bám sát Ý đồ chốt. ' +
-      'Ghi qua write_draft. Hỏi 1–2 câu nếu hướng/tông chưa rõ. Đây là bước thăm dò — đừng viết quá dài.'
+      'Người dùng vừa mở cổng NHÁP KỊCH BẢN — ĐÂY LÀ BƯỚC ĐẦU TIÊN, CHƯA có ý đồ chốt. BƯỚC 1 BẮT BUỘC: gọi read_ideal để đọc TOÀN VĂN Ý TƯỞNG THÔ (ideal.raw) người dùng nhập. ' +
+      'Rồi TỰ DO bung 1 bản KỊCH BẢN NHÁP gọn (mạch kể + tinh thần từng đoạn, CHƯA cần lời thoại chỉn chu, CHƯA phân cảnh cứng) để CHỐT HƯỚNG với người dùng — đọc kỹ ý tưởng thô rồi dựng, KHÔNG ép khuôn. ' +
+      'Ghi qua write_draft. Hỏi 1–2 câu nếu hướng/tông chưa rõ. Đây là bước thăm dò — đừng viết quá dài. Ý đồ cốt lõi sẽ được TÁCH Ở BƯỚC SAU từ chính bản nháp này.'
   },
   gate1b_skeleton: {
     worker: 'skeletonWright',
