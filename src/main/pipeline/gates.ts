@@ -39,7 +39,8 @@ import type {
   DirectorPlan,
   VisualSystem,
   AssetFull,
-  IdealBrief
+  IdealBrief,
+  ShotPanel
 } from '../../shared/types'
 
 /** Định nghĩa 1 cổng chạy được bằng agent-thợ. */
@@ -364,6 +365,20 @@ function snapshotBody(projectId: number, gateStage: string): string {
         '\n'
       : ''
     return head + scenes.map((s) => `Cảnh ${s.order_idx}: ${s.narration_vi}`).join('\n')
+  }
+  if (gateStage === 'gate_storyboard') {
+    const parts: string[] = []
+    for (const s of scenes) {
+      const blocks = listBlocks(s.id)
+      const shots = blocks
+        .filter((b) => b.shot_panel_json)
+        .map((b) => {
+          const p = JSON.parse(b.shot_panel_json as string) as ShotPanel
+          return `  • Shot ${s.order_idx}.${b.order_idx}: [${p.shot_size} / ${p.camera_angle} / ${p.camera_move}] ${p.subject} | ${p.action_start} → ${p.action_end} | ${p.duration_sec}s | @tag: ${(p.asset_tags || []).join(', ')}`
+        })
+      parts.push(`Cảnh ${s.order_idx}${shots.length ? ':\n' + shots.join('\n') : ' (CHƯA có shot phân cảnh)'}`)
+    }
+    return parts.join('\n')
   }
   // gate2/gate3: gom block
   const lines: string[] = []
