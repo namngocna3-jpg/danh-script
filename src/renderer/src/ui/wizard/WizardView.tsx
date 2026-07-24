@@ -16,6 +16,8 @@ import { ParamsPanel } from './ParamsPanel'
 import { DirectorPanel } from './DirectorPanel'
 import { AssetStudioPanel } from './AssetStudioPanel'
 import { ExportPanel } from './ExportPanel'
+import { ScriptWorkbench } from './ScriptWorkbench'
+import { StoryboardPanel } from './StoryboardPanel'
 
 /**
  * Wizard 13 bước (mô hình Toonflow đầy đủ). Thứ tự + nhãn + luật khóa nằm
@@ -119,57 +121,10 @@ export function WizardView({ project }: { project: Project }): JSX.Element {
       {/* Nội dung cổng — THỨ TỰ MỚI: Nháp trước Ý đồ */}
       {step === 'auto' && <OrchestratorPanel projectId={project.id} />}
       {step === 'prep' && (
-        <PrepPanel projectId={project.id} onDone={() => advance('draft')} />
-      )}
-      {step === 'draft' && (
-        <GateChatPanel
-          projectId={project.id}
-          stage="gate1a_draft"
-          gateId="gate1a"
-          title="Nháp kịch bản · Bung từ ý tưởng thô"
-          desc="Thợ scriptDraft đọc Ý TƯỞNG THÔ (ideal.raw) rồi tự do viết bản nháp gọn (mạch kể + tinh thần từng cảnh) để CHỐT HƯỚNG. Chưa cần lời thoại chỉn chu — chat để lái hướng/tông. Ý đồ sẽ được tách Ở BƯỚC SAU từ chính bản nháp này."
-          onDone={() => advance('gate0')}
-        />
-      )}
-      {step === 'gate0' && (
-        <GateChatPanel
-          projectId={project.id}
-          stage="gate0_ideal"
-          gateId="gate0"
-          title="GATE 0 · Ý đồ / thông điệp"
-          desc="Trợ lý đọc bản NHÁP vừa chốt (+ ý tưởng thô) rồi chưng cất ý đồ cốt lõi: thông điệp, đối tượng, cảm xúc mục tiêu, tông. Chat để tinh chỉnh; chỉ qua bước sau khi bạn chốt."
-          onDone={() => advance('skeleton')}
-        />
-      )}
-      {step === 'skeleton' && (
-        <GateChatPanel
-          projectId={project.id}
-          stage="gate1b_skeleton"
-          gateId="gate1b"
-          title="Khung xương cốt chuyện"
-          desc="Thợ skeletonWright chốt logline + nhịp hook→cao trào→kết + đường cong cảm xúc + điểm trả bài. Bám nháp + ý đồ đã chốt."
-          onDone={() => advance('adaptation')}
-        />
-      )}
-      {step === 'adaptation' && (
-        <GateChatPanel
-          projectId={project.id}
-          stage="gate1c_adaptation"
-          gateId="gate1c"
-          title="Chiến lược chuyển thể"
-          desc='Thợ adaptWright quy mỗi thông điệp → hành động/hình ảnh CỤ THỂ ("cho xem đừng kể") + motif hình + cạm bẫy cần né.'
-          onDone={() => advance('script')}
-        />
+        <PrepPanel projectId={project.id} onDone={() => advance('script')} />
       )}
       {step === 'script' && (
-        <GateChatPanel
-          projectId={project.id}
-          stage="gate1d_script"
-          gateId="gate1d"
-          title="Kịch bản final · Narration + shot"
-          desc="Thợ scriptFinal viết narration tiếng Việt CHỐT từng cảnh + quy hoạch shot mỗi cảnh (chia block). Chat để chỉnh giọng/độ dài."
-          onDone={() => advance('params')}
-        />
+        <ScriptWorkbench projectId={project.id} onDone={() => advance('params')} />
       )}
       {step === 'params' && (
         <ParamsPanel
@@ -182,7 +137,10 @@ export function WizardView({ project }: { project: Project }): JSX.Element {
         <DirectorPanel projectId={project.id} onDone={() => advance('assets')} />
       )}
       {step === 'assets' && (
-        <AssetStudioPanel projectId={project.id} onDone={() => advance('gate2')} />
+        <AssetStudioPanel projectId={project.id} onDone={() => advance('storyboard')} />
+      )}
+      {step === 'storyboard' && (
+        <StoryboardPanel projectId={project.id} onDone={() => advance('gate2')} />
       )}
       {step === 'gate2' && (
         <GateChatPanel
