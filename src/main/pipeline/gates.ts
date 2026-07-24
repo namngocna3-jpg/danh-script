@@ -15,6 +15,7 @@ import {
 } from '../core/skillLoader'
 import { toolsFor } from '../tools'
 import { workerSpec } from './workerSpecs'
+import { availableCraftFor, availableSkillsPrompt } from '../core/craftRegistry'
 import { chat } from '../core/llmGateway'
 import { llmQueue } from '../core/queue'
 import {
@@ -144,23 +145,29 @@ export async function runGate(
 
   const layerParts = spec.layers.map((f) => readSkillOptional(f)).filter(Boolean)
 
-  // Genre à-la-carte (TÙY CHỌN): nếu người dùng chọn thể loại, nạp file gợi ý nhịp kể
-  // cho scriptwright (GATE 1). Không có genre → bỏ qua, chạy nhịp tự do (bottom-up).
-  if (gateKey === 'scriptwright' && project.params_json) {
+  // Genre à-la-carte (TÙY CHỌN): đọc 1 lần, dùng cho cả craft tự-rút.
+  let genreId: string | null = null
+  if (project.params_json) {
     try {
-      const genre = (JSON.parse(project.params_json) as { genre?: string }).genre
-      if (genre) {
-        const genreSkill = readSkillOptional(`genres/${genre}.md`)
-        if (genreSkill) layerParts.push(genreSkill)
-      }
+      genreId = (JSON.parse(project.params_json) as { genre?: string }).genre ?? null
     } catch (e) {
       console.warn('[danh-script] runGate: params_json hỏng, bỏ qua genre', e)
     }
   }
+  // Genre nạp TĨNH cho scriptwright (nhịp kể là cốt lõi ở đây).
+  if (gateKey === 'scriptwright' && genreId) {
+    const genreSkill = readSkillOptional(`genres/${genreId}.md`)
+    if (genreSkill) layerParts.push(genreSkill)
+  }
+
+  // ⭐ Kho CRAFT tự-rút khớp bước + style + genre (loại story ở scriptwright vì đã nạp tĩnh).
+  let craft = availableCraftFor(spec.stage, project.style_id, genreId)
+  if (gateKey === 'scriptwright') craft = craft.filter((c) => c.axis !== 'story')
+  const craftBlock = availableSkillsPrompt(craft)
 
   const system = injectOutputIntent(
     injectStyleAnchor(
-      composeSystem(loadExecutionSkill(project.pipeline, spec.worker), ...layerParts),
+      composeSystem(loadExecutionSkill(project.pipeline, spec.worker), ...layerParts, craftBlock),
       project.style_id
     ),
     projectId
@@ -169,10 +176,12 @@ export async function runGate(
   const ideal = JSON.parse(project.ideal_json) as { raw: string }
   const userPrompt = spec.buildPrompt({ idealRaw: ideal.raw })
 
+  const toolNames = craft.length ? [...spec.tools, 'list_skills', 'read_skill_file'] : spec.tools
+
   const result = await runAgent({
     system,
     userPrompt,
-    tools: toolsFor(spec.tools),
+    tools: toolsFor(toolNames),
     ctx: { projectId },
     maxSteps: 24,
     temperature: 0.6,
