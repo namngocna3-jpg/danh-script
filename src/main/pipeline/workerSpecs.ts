@@ -78,6 +78,18 @@ export const WORKER_SPECS: Record<string, WorkerSpec> = {
       'consistency.md',
       'moderation-softening.md'
     ]
+  },
+  storyboardWright: {
+    tools: [
+      'read_ideal',
+      'read_scenes',
+      'read_blocks',
+      'read_assets',
+      'read_plan',
+      'read_script_full',
+      'write_shot_panel'
+    ],
+    layers: ['motion-library.md', 'storyboard-craft.md']
   }
 }
 
