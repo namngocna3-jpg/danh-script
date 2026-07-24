@@ -246,7 +246,12 @@ export function upsertBlock(
   projectId: number,
   sceneOrder: number,
   blockOrder: number,
-  fields: { shot_desc?: string; image_prompt_en?: string; video_prompt_json?: string }
+  fields: {
+    shot_desc?: string
+    image_prompt_en?: string
+    video_prompt_json?: string
+    shot_panel_json?: string
+  }
 ): number {
   const d = getDb()
   const scene = d
@@ -261,15 +266,16 @@ export function upsertBlock(
   if (!existing) {
     const info = d
       .prepare(
-        `INSERT INTO blocks (scene_id, order_idx, shot_desc, image_prompt_en, video_prompt_json)
-         VALUES (?, ?, ?, ?, ?)`
+        `INSERT INTO blocks (scene_id, order_idx, shot_desc, image_prompt_en, video_prompt_json, shot_panel_json)
+         VALUES (?, ?, ?, ?, ?, ?)`
       )
       .run(
         scene.id,
         blockOrder,
         fields.shot_desc ?? null,
         fields.image_prompt_en ?? null,
-        fields.video_prompt_json ?? null
+        fields.video_prompt_json ?? null,
+        fields.shot_panel_json ?? null
       )
     return Number(info.lastInsertRowid)
   }
@@ -278,12 +284,14 @@ export function upsertBlock(
     `UPDATE blocks SET
        shot_desc = COALESCE(?, shot_desc),
        image_prompt_en = COALESCE(?, image_prompt_en),
-       video_prompt_json = COALESCE(?, video_prompt_json)
+       video_prompt_json = COALESCE(?, video_prompt_json),
+       shot_panel_json = COALESCE(?, shot_panel_json)
      WHERE id = ?`
   ).run(
     fields.shot_desc ?? null,
     fields.image_prompt_en ?? null,
     fields.video_prompt_json ?? null,
+    fields.shot_panel_json ?? null,
     existing.id
   )
   return existing.id
