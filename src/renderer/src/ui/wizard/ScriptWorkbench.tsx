@@ -24,9 +24,17 @@ const TABS: Array<{ gateId: GateId; stage: ChatGateStage; label: string; title: 
 ]
 
 export function ScriptWorkbench({ projectId, onDone }: { projectId: number; onDone: () => void }): JSX.Element {
-  const [active, setActive] = useState(0)
   // Stage dự án hiện tại nằm ở store app (activeProject.stage) — dùng để khóa tab.
   const stage = useApp((s) => s.activeProject?.stage ?? 'draft')
+
+  // Mở lại DB ở sub-stage dở dang (vd Chuyển thể) → vào ngay TAB cần làm tiếp,
+  // không mặc kẹt ở tab Nháp. Mỗi tab kịch bản có rank == index nên tab chưa chốt
+  // đầu tiên = stageRank+1; clamp trong [0, last]. Chỉ là giá trị KHỞI TẠO — sau đó
+  // người dùng bấm tab tự do (tab quá khứ đều mở khóa).
+  const [active, setActive] = useState(() => {
+    const next = stageRank(stage) + 1
+    return Math.max(0, Math.min(next, TABS.length - 1))
+  })
 
   // Tab i mở khi stage tab (i-1) đã chốt — tái dùng convention stageRank của wizardSteps.
   const tabUnlocked = (i: number): boolean =>
