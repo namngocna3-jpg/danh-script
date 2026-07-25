@@ -3,13 +3,16 @@
 // Mọi handler bọc kết quả trong IpcResult để không ném lỗi qua bridge.
 // ============================================================
 import { ipcMain } from 'electron'
-import type { CreateProjectInput, IpcResult, ProjectParams, AssetRole } from '../shared/types'
+import type { CreateProjectInput, IpcResult, ProjectParams, AssetRole, Ideal } from '../shared/types'
 import {
   createProject,
   listProjects,
   getProject,
   deleteProject,
   updateProjectParams,
+  updateProjectIdeal,
+  forceProjectStage,
+  clearStageOutputs,
   setProjectDirector,
   updateProjectStage,
   getPlanArtifacts,
@@ -359,6 +362,35 @@ export function registerIpc(): void {
       return fail(err)
     }
   })
+
+  // ---- Sửa ý tưởng (ideal) trong app ----
+  ipcMain.handle('project:updateIdeal', async (_e, projectId: number, ideal: Ideal) => {
+    try {
+      const p = getProject(projectId)
+      if (!p) throw new Error('Không tìm thấy dự án')
+      const old = JSON.parse(p.ideal_json) as Ideal
+      // Giữ brief đã làm giàu (prep/GATE 0) nếu payload không mang theo.
+      const merged: Ideal = { ...ideal, brief: ideal.brief ?? old.brief }
+      updateProjectIdeal(projectId, JSON.stringify(merged))
+      return ok(getProject(projectId))
+    } catch (err) {
+      return fail(err)
+    }
+  })
+
+  // ---- Làm lại 1 bước: dọn output cũ (chống stale) + hạ stage mở khóa lại ----
+  ipcMain.handle(
+    'project:clearStage',
+    async (_e, projectId: number, step: string, backStage: string) => {
+      try {
+        clearStageOutputs(projectId, step)
+        forceProjectStage(projectId, backStage)
+        return ok(getProject(projectId))
+      } catch (err) {
+        return fail(err)
+      }
+    }
+  )
 
   // ---- Chốt gu → thợ directorBrief sinh Director Bible (stream tiến độ như prep) ----
   ipcMain.handle('director:brief', async (e, projectId: number) => {

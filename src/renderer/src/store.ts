@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { CreateProjectInput, Project, LlmSettingsPublic } from '@shared/types'
+import type { CreateProjectInput, Project, LlmSettingsPublic, Ideal } from '@shared/types'
 
 interface AppState {
   projects: Project[]
@@ -21,6 +21,8 @@ interface AppState {
   openProject: (id: number) => Promise<void>
   closeProject: () => void
   refreshActiveProject: () => Promise<void>
+  updateIdeal: (id: number, ideal: Ideal) => Promise<boolean>
+  clearStage: (id: number, step: string, backStage: string) => Promise<boolean>
 }
 
 export const useApp = create<AppState>((set, get) => ({
@@ -83,5 +85,26 @@ export const useApp = create<AppState>((set, get) => ({
     if (!cur) return
     const res = await window.danh.project.get(cur.id)
     if (res.ok && res.data) set({ activeProject: res.data })
+  },
+
+  async updateIdeal(id, ideal) {
+    const res = await window.danh.project2.updateIdeal(id, ideal)
+    if (res.ok && res.data) {
+      set({ activeProject: res.data })
+      await get().loadProjects()
+      return true
+    }
+    set({ error: res.ok ? 'Không cập nhật được ý tưởng' : res.error })
+    return false
+  },
+
+  async clearStage(id, step, backStage) {
+    const res = await window.danh.project2.clearStage(id, step, backStage)
+    if (res.ok && res.data) {
+      set({ activeProject: res.data })
+      return true
+    }
+    set({ error: res.ok ? 'Không dọn được bước này' : res.error })
+    return false
   }
 }))

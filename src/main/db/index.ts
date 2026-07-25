@@ -530,6 +530,64 @@ export function updateProjectParams(id: number, paramsJson: string, styleId: str
     .run(paramsJson, styleId, id)
 }
 
+/** Ghi đè ideal_json (payload đã merge sẵn ở tầng IPC — giữ brief cũ nếu cần). */
+export function updateProjectIdeal(id: number, idealJson: string): void {
+  getDb().prepare('UPDATE projects SET ideal_json = ? WHERE id = ?').run(idealJson, id)
+}
+
+/**
+ * Ghi THẲNG stage (KHÔNG chặn monotonic như updateProjectStage) — chỉ dùng khi
+ * người dùng CỐ Ý làm lại 1 bước: hạ stage về "trước bước đó" để mở khóa lại.
+ */
+export function forceProjectStage(id: number, stage: string): void {
+  getDb().prepare('UPDATE projects SET stage = ? WHERE id = ?').run(stage, id)
+}
+
+/**
+ * Dọn OUTPUT của 1 bước wizard (clean slate trước khi sinh lại) — chống data sót.
+ * Tận dụng CASCADE khóa ngoại: xóa scenes → tự xóa blocks + block_assets.
+ * Chỉ các bước SINH DATA mới có nhánh; bước khác ném lỗi để lộ nhầm lẫn sớm.
+ */
+export function clearStageOutputs(projectId: number, step: string): void {
+  const d = getDb()
+  switch (step) {
+    case 'script': // xóa toàn bộ cảnh/khối (nền của mọi bước sau)
+      d.prepare('DELETE FROM scenes WHERE project_id = ?').run(projectId)
+      break
+    case 'director':
+      d.prepare("DELETE FROM plan_artifacts WHERE project_id = ? AND kind = 'director'").run(
+        projectId
+      )
+      break
+    case 'assets': // nguyên liệu (cascade block_assets) + hệ thị giác
+      d.prepare('DELETE FROM assets WHERE project_id = ?').run(projectId)
+      d.prepare(
+        "DELETE FROM plan_artifacts WHERE project_id = ? AND kind = 'visual_system'"
+      ).run(projectId)
+      break
+    case 'storyboard':
+      d.prepare(
+        `UPDATE blocks SET shot_panel_json = NULL
+         WHERE scene_id IN (SELECT id FROM scenes WHERE project_id = ?)`
+      ).run(projectId)
+      break
+    case 'gate2':
+      d.prepare(
+        `UPDATE blocks SET image_prompt_en = NULL
+         WHERE scene_id IN (SELECT id FROM scenes WHERE project_id = ?)`
+      ).run(projectId)
+      break
+    case 'gate3':
+      d.prepare(
+        `UPDATE blocks SET video_prompt_json = NULL
+         WHERE scene_id IN (SELECT id FROM scenes WHERE project_id = ?)`
+      ).run(projectId)
+      break
+    default:
+      throw new Error(`Bước không hỗ trợ làm lại: ${step}`)
+  }
+}
+
 /** Ghi gu đạo diễn chọn ở đầu dự án (chảy vào ledger mọi bước). */
 export function setProjectDirector(id: number, directorId: string): void {
   getDb().prepare('UPDATE projects SET director_id = ? WHERE id = ?').run(directorId, id)

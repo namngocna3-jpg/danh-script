@@ -5,10 +5,12 @@ import {
   stepFromStage,
   stepUnlocked,
   stepConfirmed,
+  backStageFor,
   type StepKey
 } from '@shared/wizardSteps'
 import { useApp } from '../../store'
 import { useWizard } from '../../wizardStore'
+import { EditIdealModal } from '../EditIdealModal'
 import { PrepPanel } from './PrepPanel'
 import { GateChatPanel } from './GateChatPanel'
 import { OrchestratorPanel } from './OrchestratorPanel'
@@ -30,10 +32,13 @@ import { StoryboardPanel } from './StoryboardPanel'
 export function WizardView({ project }: { project: Project }): JSX.Element {
   const closeProject = useApp((s) => s.closeProject)
   const refreshActiveProject = useApp((s) => s.refreshActiveProject)
+  const clearStage = useApp((s) => s.clearStage)
   const resetForProject = useWizard((s) => s.resetForProject)
   const wizardError = useWizard((s) => s.wizardError)
 
   const [step, setStep] = useState<StepKey>(() => stepFromStage(project.stage))
+  const [editing, setEditing] = useState(false)
+  const [redoing, setRedoing] = useState(false)
 
   // Đổi dự án → xóa state tạm, nhảy về bước phù hợp stage.
   // CHỈ phụ thuộc project.id: khi CHÍNH stage đổi (do vừa chốt) ta KHÔNG muốn
@@ -49,6 +54,25 @@ export function WizardView({ project }: { project: Project }): JSX.Element {
   function advance(next: StepKey): void {
     void refreshActiveProject()
     setStep(next)
+  }
+
+  // Các bước SINH DATA có thể "làm lại" (dọn output cũ trước khi sinh lại).
+  const REDOABLE: StepKey[] = ['script', 'director', 'assets', 'storyboard', 'gate2', 'gate3']
+
+  // 🔄 Làm lại bước hiện tại: dọn sạch output cũ → hạ stage → sinh lại từ đầu.
+  async function redoStep(): Promise<void> {
+    const heavy = step === 'script' || step === 'assets'
+    const msg = heavy
+      ? 'Làm lại bước này? Toàn bộ nội dung đã sinh của bước SẼ BỊ XÓA — kể cả nội dung các bước SAU (vì chúng dựa trên bước này).'
+      : 'Làm lại bước này? Nội dung đã sinh của bước sẽ bị xóa để làm mới.'
+    if (!window.confirm(msg)) return
+    setRedoing(true)
+    const done = await clearStage(project.id, step, backStageFor(step))
+    setRedoing(false)
+    if (done) {
+      resetForProject() // xóa state chat tạm của bước
+      advance(step) // ở lại bước này, đã sạch để chạy lại
+    }
   }
 
   const params = useMemo<ProjectParams | null>(() => {
@@ -67,9 +91,16 @@ export function WizardView({ project }: { project: Project }): JSX.Element {
         <button className="btn-ghost px-2.5 py-1.5 text-xs" onClick={closeProject}>
           ← Dự án
         </button>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h1 className="truncate text-lg font-bold text-white">{project.name}</h1>
         </div>
+        <button
+          className="btn-ghost shrink-0 px-2.5 py-1.5 text-xs"
+          onClick={() => setEditing(true)}
+          title="Sửa ý tưởng gốc (ideal) — không xóa nội dung đã sinh"
+        >
+          ✏️ Sửa ý tưởng
+        </button>
       </div>
 
       {/* Stepper — khóa TƯƠNG LAI, mở QUÁ KHỨ (dựa trên project.stage) */}
@@ -116,6 +147,22 @@ export function WizardView({ project }: { project: Project }): JSX.Element {
       {wizardError && (
         <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
           {wizardError}
+        </div>
+      )}
+
+      {/* 🔄 Làm lại bước sinh-data: dọn output cũ (hết data sót) rồi sinh lại từ đầu */}
+      {REDOABLE.includes(step) && (
+        <div className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-ink-800 bg-ink-900/40 px-4 py-2.5">
+          <span className="text-xs text-slate-500">
+            Kết quả bước này sai/thiếu? Dọn sạch rồi sinh lại từ đầu (không để nội dung cũ sót lại).
+          </span>
+          <button
+            className="btn-ghost shrink-0 px-2.5 py-1.5 text-xs text-amber-soft disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={redoing}
+            onClick={() => void redoStep()}
+          >
+            {redoing ? 'Đang dọn…' : '🔄 Làm lại bước này'}
+          </button>
         </div>
       )}
 
@@ -171,6 +218,16 @@ export function WizardView({ project }: { project: Project }): JSX.Element {
         />
       )}
       {step === 'export' && <ExportPanel projectId={project.id} />}
+
+      {editing && (
+        <EditIdealModal
+          project={project}
+          onClose={() => {
+            setEditing(false)
+            void refreshActiveProject()
+          }}
+        />
+      )}
     </div>
   )
 }

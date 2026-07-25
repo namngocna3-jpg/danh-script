@@ -5,6 +5,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   CreateProjectInput,
   IpcResult,
+  Ideal,
   Project,
   ProjectParams,
   PrepResult,
@@ -97,6 +98,15 @@ export interface DanhScriptApi {
   project2: {
     setParams: (projectId: number, params: ProjectParams) => Promise<IpcResult<boolean>>
     setDirector: (projectId: number, directorId: string) => Promise<IpcResult<boolean>>
+    updateIdeal: (
+      projectId: number,
+      ideal: Ideal
+    ) => Promise<IpcResult<Project | undefined>>
+    clearStage: (
+      projectId: number,
+      step: string,
+      backStage: string
+    ) => Promise<IpcResult<Project | undefined>>
   }
   assets: {
     list: (projectId: number) => Promise<IpcResult<AssetTag[]>>
@@ -196,7 +206,11 @@ const api: DanhScriptApi = {
     setParams: (projectId, params) =>
       ipcRenderer.invoke('project:setParams', projectId, params),
     setDirector: (projectId, directorId) =>
-      ipcRenderer.invoke('project:setDirector', projectId, directorId)
+      ipcRenderer.invoke('project:setDirector', projectId, directorId),
+    updateIdeal: (projectId, ideal) =>
+      ipcRenderer.invoke('project:updateIdeal', projectId, ideal),
+    clearStage: (projectId, step, backStage) =>
+      ipcRenderer.invoke('project:clearStage', projectId, step, backStage)
   },
   assets: {
     list: (projectId) => ipcRenderer.invoke('asset:list', projectId),

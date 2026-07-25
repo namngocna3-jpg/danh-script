@@ -114,6 +114,19 @@ export function stepConfirmed(stepKey: string, stage: string): boolean {
 }
 
 /**
+ * Stage cần HẠ VỀ để "làm lại" một bước sinh-data: = confirmStage của bước gating
+ * NGAY TRƯỚC nó trong STAGE_ORDER (để bước đang làm lại về "chưa chốt", các bước
+ * sau tự khóa lại). Nếu không có bước gating nào trước → '' (về 'draft' = chưa chốt gì).
+ */
+export function backStageFor(stepKey: string): string {
+  const def = WIZARD_STEPS.find((s) => s.key === stepKey)
+  if (!def || def.confirmStage === null) return 'draft'
+  const pos = unlockPosition(def)
+  // stage ngay trước vị trí MỞ của bước này ('draft' = chưa chốt gì)
+  return STAGE_ORDER[pos - 1] ?? 'draft'
+}
+
+/**
  * Từ stage đã lưu → bước NÊN mở khi vừa mở dự án (bước kế tiếp bước đã chốt).
  * Quá gate3_video (đã tới xuất) → 'export'.
  */
