@@ -6,7 +6,7 @@
 
 export interface QueueOptions {
   intervalMs?: number // giãn cách giữa 2 task (mặc định 800ms)
-  timeoutMs?: number // timeout mỗi task (mặc định 120s — tool-use prompt dài)
+  timeoutMs?: number // timeout mỗi task (mặc định 240s — bao trọn 180s fetch + lề)
   maxRetries?: number // số lần thử lại (mặc định 4 — 9router hay chờn 502/reset)
 }
 
@@ -17,6 +17,18 @@ export interface QueueOptions {
  */
 function isTransient(err: unknown): boolean {
   const m = String((err as Error)?.message ?? err).toLowerCase()
+  // ƯU TIÊN CAO NHẤT: lỗi XÁC THỰC (401/403) thử lại VÔ ÍCH — token/key hỏng thì
+  // retry mấy lần cũng 401. Chặn sớm vì message 401 của 9router hay kèm chữ "reset"
+  // ("OAuth access token has been reset after 1m 38s") sẽ lọt luật reset bên dưới
+  // → app tưởng "chậm" rồi thử lại 4 lần rồi vẫn fail. Để nổi NGAY cho UI báo rõ.
+  if (
+    /\b(401|403)\b/.test(m) ||
+    m.includes('authentication_error') ||
+    m.includes('invalid_api_key') ||
+    m.includes('unauthorized')
+  ) {
+    return false
+  }
   return (
     /\b(429|500|502|503|504)\b/.test(m) ||
     m.includes('timeout') ||
@@ -52,7 +64,7 @@ export class TaskQueue {
 
   constructor(opts: QueueOptions = {}) {
     this.intervalMs = opts.intervalMs ?? 800
-    this.timeoutMs = opts.timeoutMs ?? 120_000
+    this.timeoutMs = opts.timeoutMs ?? 240_000
     this.maxRetries = opts.maxRetries ?? 4
   }
 
