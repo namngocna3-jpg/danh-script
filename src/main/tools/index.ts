@@ -137,12 +137,22 @@ const readAssets: ToolDef = {
     input_schema: { type: 'object', properties: {} }
   },
   handler: (_input, ctx) => {
-    return db.projectTagMap(ctx.projectId).map((t) => ({
-      tag: `@${t.tag}`,
-      role: t.role,
-      lock_note: t.lock_note,
-      has_ref_image: !!t.ref_image_path
-    }))
+    // ⭐ Trả kèm KHÓA CỨNG (mặt/dáng) + tóm tắt gen_prompt để worker khóa ngoại hình,
+    //    không chỉ lock_note chung chung → chống nhân vật trôi mặt giữa các block.
+    const full = db.listAssetsFull(ctx.projectId)
+    const lockByTag = new Map(full.map((a) => [a.tag, a]))
+    return db.projectTagMap(ctx.projectId).map((t) => {
+      const a = lockByTag.get(t.tag)
+      return {
+        tag: `@${t.tag}`,
+        role: t.role,
+        lock_note: t.lock_note,
+        identity_face: a?.identity_lock?.face || undefined,
+        identity_body: a?.identity_lock?.body || undefined,
+        appearance_hint: a?.gen_prompt ? a.gen_prompt.slice(0, 240) : undefined,
+        has_ref_image: !!t.ref_image_path
+      }
+    })
   }
 }
 

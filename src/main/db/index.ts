@@ -733,6 +733,18 @@ export function saveDerivedAsset(
   return Number(info.lastInsertRowid)
 }
 
+/** Parse an toàn identity_lock_json → IdentityLock (null nếu trống/hỏng). */
+function parseIdentityLock(json: string | null): IdentityLock | null {
+  if (!json?.trim()) return null
+  try {
+    const o = JSON.parse(json) as Partial<IdentityLock>
+    if (!o || (typeof o.face !== 'string' && typeof o.body !== 'string')) return null
+    return { face: o.face ?? '', body: o.body ?? '' }
+  } catch {
+    return null
+  }
+}
+
 /** Danh sách nguyên liệu ĐẦY ĐỦ: asset gốc (parent_id null) kèm mảng phái sinh. */
 export function listAssetsFull(projectId: number): AssetFull[] {
   const d = getDb()
@@ -757,6 +769,7 @@ export function listAssetsFull(projectId: number): AssetFull[] {
       tag: tagOf(r),
       role: toRole(r.type),
       name: r.name,
+      identity_lock: parseIdentityLock(r.identity_lock_json),
       gen_prompt: r.gen_prompt,
       ref_image_path: r.ref_image_path,
       source: r.source === 'auto' ? 'auto' : 'manual',

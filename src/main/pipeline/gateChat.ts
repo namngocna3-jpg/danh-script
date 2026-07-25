@@ -269,12 +269,24 @@ function buildInheritedLedger(projectId: number, gateStage: string): string {
       if (assets.length) {
         out.push(
           `## NGUYÊN LIỆU (@tag CÓ THẬT — chỉ nhúng tag trong danh sách này)\n` +
+            `> KHÓA CỨNG dưới đây = ngoại hình đã chốt ở bước Nguyên liệu. BÁM Y NGUYÊN mọi block để nhân vật/sản phẩm KHÔNG trôi mặt/đổi hình. CẤM bịa lại ngoại hình khác.\n` +
             assets
               .map((a) => {
                 const derivs = a.derivatives.length
                   ? ` [biến thể: ${a.derivatives.map((d) => `@${d.tag}`).join(', ')}]`
                   : ''
-                return `@${a.tag} (${a.role}): ${a.name}${derivs}`
+                // Ngoại hình khóa cứng: ưu tiên identity_lock (mặt/dáng), bù thêm tóm tắt gen_prompt gốc.
+                const lockParts: string[] = []
+                if (a.identity_lock?.face?.trim())
+                  lockParts.push(`mặt/nơi chốn: ${a.identity_lock.face.trim()}`)
+                if (a.identity_lock?.body?.trim())
+                  lockParts.push(`dáng: ${a.identity_lock.body.trim()}`)
+                const lock = lockParts.length ? `\n   ↳ KHÓA CỨNG — ${lockParts.join('; ')}` : ''
+                const genHint =
+                  !lockParts.length && a.gen_prompt?.trim()
+                    ? `\n   ↳ Ngoại hình gốc (bám sát): ${a.gen_prompt.trim().slice(0, 240)}`
+                    : ''
+                return `@${a.tag} (${a.role}): ${a.name}${derivs}${lock}${genHint}`
               })
               .join('\n')
         )

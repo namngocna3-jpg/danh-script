@@ -241,6 +241,7 @@ export interface AssetFull {
   tag: string
   role: AssetRole
   name: string
+  identity_lock: IdentityLock | null // ⭐ mặt/dáng khóa CỨNG (char) — nguồn chống drift cho gate ảnh/video
   gen_prompt: string | null
   ref_image_path: string | null
   source: 'auto' | 'manual'
