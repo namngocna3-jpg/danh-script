@@ -9,7 +9,8 @@ import {
   readSkillOptional,
   composeSystem,
   injectStyleAnchor,
-  injectOutputIntent
+  injectOutputIntent,
+  loadDirectorPersona
 } from '../core/skillLoader'
 import { toolsFor } from '../tools'
 import { workerSpec } from './workerSpecs'
@@ -193,8 +194,12 @@ type InheritKey = 'brief' | 'draft' | 'skeleton' | 'adaptation' | 'director' | '
  * Rỗng nếu cổng không có gì kế thừa (VD gate1a_draft — bước đầu).
  */
 function buildInheritedLedger(projectId: number, gateStage: string): string {
+  // Gu đạo diễn (chọn đầu dự án) chảy vào MỌI bước — kể cả bước không có key kế thừa
+  // (VD gate1a_draft): là kim chỉ nam thẩm mỹ xuyên suốt, đọc DB tươi mỗi lượt.
+  const directorBlock = buildDirectorBlock(projectId)
+
   const keys = INHERIT_MAP[gateStage]
-  if (!keys || keys.length === 0) return ''
+  if (!keys || keys.length === 0) return directorBlock
   const plan = getPlanArtifacts(projectId)
   const out: string[] = []
 
@@ -276,11 +281,27 @@ function buildInheritedLedger(projectId: number, gateStage: string): string {
     }
   }
 
-  if (!out.length) return ''
-  return (
+  if (!out.length) return directorBlock
+  const ledger =
     'SỔ CÁI CÁC BƯỚC TRƯỚC (đã chốt — BÁM SÁT, không đổi hướng; ' +
     'đây là ngữ cảnh kế thừa, bạn KHÔNG cần gọi lại read tool để lấy phần này):\n\n' +
     out.join('\n\n')
+  return directorBlock ? `${directorBlock}\n\n${ledger}` : ledger
+}
+
+/**
+ * Khối GU ĐẠO DIỄN chọn ở đầu dự án (skills/directors/<id>.md).
+ * Rỗng nếu dự án chưa chọn (director_id NULL — DB cũ vẫn chạy).
+ * Đọc DB + file tươi mỗi lượt → đổi gu là mọi bước sau nhận ngay.
+ */
+function buildDirectorBlock(projectId: number): string {
+  const project = getProject(projectId)
+  const persona = loadDirectorPersona(project?.director_id).trim()
+  if (!persona) return ''
+  return (
+    'GU ĐẠO DIỄN CỦA DỰ ÁN (chọn ở đầu — kim chỉ nam thẩm mỹ XUYÊN SUỐT: ' +
+    'mọi quyết định sáng/màu/nhịp/cảm xúc phải nhất quán với gu này, không tự đổi):\n\n' +
+    persona
   )
 }
 

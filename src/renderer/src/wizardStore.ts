@@ -13,6 +13,7 @@ import type {
   ReviewResult,
   StyleOption,
   GenreOption,
+  DirectorOption,
   ExportBundle,
   GateKey,
   ChatTurn,
@@ -86,6 +87,7 @@ interface WizardState {
   reviewing: GateId | null
   styles: StyleOption[]
   genres: GenreOption[]
+  directors: DirectorOption[]
   exportBundle: ExportBundle | null
   exporting: boolean
   wizardError: string | null
@@ -108,6 +110,8 @@ interface WizardState {
 
   loadStyles: () => Promise<void>
   loadGenres: () => Promise<void>
+  loadDirectors: () => Promise<void>
+  setDirector: (projectId: number, directorId: string) => Promise<boolean>
   runPrep: (projectId: number) => Promise<boolean>
   runGate0: (projectId: number) => Promise<boolean>
   runGate: (gate: OneShotGate, projectId: number) => Promise<boolean>
@@ -136,6 +140,7 @@ export const useWizard = create<WizardState>((set, get) => ({
   reviewing: null,
   styles: [],
   genres: [],
+  directors: [],
   exportBundle: null,
   exporting: false,
   wizardError: null,
@@ -179,6 +184,22 @@ export const useWizard = create<WizardState>((set, get) => ({
   async loadGenres() {
     const res = await window.danh.genres.list()
     if (res.ok) set({ genres: res.data })
+  },
+
+  async loadDirectors() {
+    const res = await window.danh.directors.list()
+    if (res.ok) set({ directors: res.data })
+  },
+
+  async setDirector(projectId, directorId) {
+    const res = await window.danh.project2.setDirector(projectId, directorId)
+    if (res.ok) {
+      // director_id nằm trên project → làm tươi activeProject để UI đọc lựa chọn mới.
+      await useApp.getState().refreshActiveProject()
+      return true
+    }
+    set({ wizardError: res.error })
+    return false
   },
 
   async runPrep(projectId) {

@@ -212,3 +212,40 @@ export function listGenres(): Array<{ id: string; label: string; group: string }
   }
   return out
 }
+
+/**
+ * Liệt kê gu đạo diễn trong skills/directors/ (bỏ _index.md).
+ * id = tên file không .md; label + description đọc từ frontmatter.
+ */
+export function listDirectors(): Array<{ id: string; label: string; description: string }> {
+  const root = skillsRoot()
+  const dir = join(root, 'directors')
+  if (!existsSync(dir)) return []
+  const out: Array<{ id: string; label: string; description: string }> = []
+  for (const file of readdirSync(dir)) {
+    if (!file.endsWith('.md') || file.startsWith('_')) continue
+    const id = file.slice(0, -3)
+    let label = id
+    let description = ''
+    try {
+      const md = readFileSync(join(dir, file), 'utf-8')
+      const l = md.match(/^label:\s*(.+)$/m)
+      if (l) label = l[1].trim()
+      const d = md.match(/^description:\s*(.+)$/m)
+      if (d) description = d[1].trim()
+    } catch {
+      /* giữ id */
+    }
+    out.push({ id, label, description })
+  }
+  return out
+}
+
+/**
+ * Đọc TOÀN VĂN gu đạo diễn (skills/directors/<id>.md) để chèn vào ledger kế thừa.
+ * Không có id / không đọc được → trả '' (ledger tự bỏ qua khối đạo diễn).
+ */
+export function loadDirectorPersona(directorId?: string | null): string {
+  if (!directorId) return ''
+  return readSkillOptional(`directors/${directorId}.md`)
+}

@@ -13,6 +13,7 @@ import { PrepPanel } from './PrepPanel'
 import { GateChatPanel } from './GateChatPanel'
 import { OrchestratorPanel } from './OrchestratorPanel'
 import { ParamsPanel } from './ParamsPanel'
+import { DirectorPickerPanel } from './DirectorPickerPanel'
 import { DirectorPanel } from './DirectorPanel'
 import { AssetStudioPanel } from './AssetStudioPanel'
 import { ExportPanel } from './ExportPanel'
@@ -121,7 +122,14 @@ export function WizardView({ project }: { project: Project }): JSX.Element {
       {/* Nội dung cổng — THỨ TỰ MỚI: Nháp trước Ý đồ */}
       {step === 'auto' && <OrchestratorPanel projectId={project.id} />}
       {step === 'prep' && (
-        <PrepPanel projectId={project.id} onDone={() => advance('script')} />
+        <PrepPanel projectId={project.id} onDone={() => advance('director_pick')} />
+      )}
+      {step === 'director_pick' && (
+        <DirectorPickerPanel
+          projectId={project.id}
+          current={project.director_id}
+          onDone={() => advance('script')}
+        />
       )}
       {step === 'script' && (
         <ScriptWorkbench projectId={project.id} onDone={() => advance('params')} />

@@ -10,6 +10,7 @@ import {
   getProject,
   deleteProject,
   updateProjectParams,
+  setProjectDirector,
   updateProjectStage,
   getPlanArtifacts,
   listAssetsFull,
@@ -19,7 +20,7 @@ import { chat, listModels } from './core/llmGateway'
 import { llmQueue } from './core/queue'
 import { getPublicSettings, saveSettings, effectiveConfig } from './core/settings'
 import type { Provider } from './core/llmGateway'
-import { listStyles, listGenres } from './core/skillLoader'
+import { listStyles, listGenres, listDirectors } from './core/skillLoader'
 import { runGate0 } from './pipeline/gate0'
 import { runGate, reviewGate, buildExport, runPrep } from './pipeline/gates'
 import { runGateChat, gateChatHistory, confirmGate } from './pipeline/gateChat'
@@ -335,6 +336,25 @@ export function registerIpc(): void {
   ipcMain.handle('genres:list', async () => {
     try {
       return ok(listGenres())
+    } catch (err) {
+      return fail(err)
+    }
+  })
+
+  // ---- Danh mục gu đạo diễn (chọn ở đầu dự án) ----
+  ipcMain.handle('directors:list', async () => {
+    try {
+      return ok(listDirectors())
+    } catch (err) {
+      return fail(err)
+    }
+  })
+
+  // ---- Chọn gu đạo diễn cho dự án (không gating: chỉ ghi director_id) ----
+  ipcMain.handle('project:setDirector', async (_e, projectId: number, directorId: string) => {
+    try {
+      setProjectDirector(projectId, directorId)
+      return ok(true)
     } catch (err) {
       return fail(err)
     }

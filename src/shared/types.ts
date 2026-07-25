@@ -175,6 +175,7 @@ export interface Project {
   ideal_json: string // JSON<Ideal>
   params_json: string | null // JSON<ProjectParams>
   style_id: string | null
+  director_id: string | null // gu đạo diễn chọn ở đầu dự án (skills/directors/<id>.md); null = chưa chọn
   stage: Stage
   created_at: string
 }
@@ -391,6 +392,13 @@ export interface GenreOption {
   id: string // slug = tên file không .md
   label: string // tiêu đề H1 đã bỏ tiền tố "GENRE · "
   group: string // sales | story | misc (chữ đầu slug) để UI gom nhóm
+}
+
+/** 1 gu đạo diễn (skills/directors/<id>.md) chọn ở đầu dự án — chảy vào ledger mọi bước. */
+export interface DirectorOption {
+  id: string // slug = tên file không .md
+  label: string // frontmatter label
+  description: string // frontmatter description (1 câu — giúp chọn)
 }
 
 /**

@@ -29,12 +29,15 @@ export interface WizardStepDef {
 export const WIZARD_STEPS = [
   { key: 'auto', label: '🤖 Tự động', confirmStage: null },
   { key: 'prep', label: 'Chuẩn bị', confirmStage: null },
+  // Chọn GU ĐẠO DIỄN — non-gating (confirmStage null): chỉ ghi director_id, chảy vào
+  // ledger MỌI bước sau như kim chỉ nam thẩm mỹ. Không vào STAGE_ORDER nên không khóa.
+  { key: 'director_pick', label: '🎬 Chọn đạo diễn', confirmStage: null },
   // Màn GỘP: 5 bước kịch bản cũ (Nháp→Ý đồ→Khung xương→Chuyển thể→Final) nay là
   // 5 TAB trong ScriptWorkbench. Stepper ngoài chỉ còn 1 nút. Mở sớm từ gate1a_draft
   // (để vào ngay sau prep), ✓ done khi chốt gate1d_script (tab Final).
   { key: 'script', label: 'Kịch bản', confirmStage: 'gate1d_script', unlockStage: 'gate1a_draft' },
   { key: 'params', label: 'Style', confirmStage: 'gate_params' },
-  { key: 'director', label: 'Đạo diễn', confirmStage: 'gate_director' },
+  { key: 'director', label: 'Nhịp & thời lượng', confirmStage: 'gate_director' },
   { key: 'assets', label: 'Nguyên liệu', confirmStage: 'gate_assets' },
   { key: 'storyboard', label: '🎞️ Phân cảnh', confirmStage: 'gate_storyboard' },
   { key: 'gate2', label: 'Prompt ảnh', confirmStage: 'gate2_image' },

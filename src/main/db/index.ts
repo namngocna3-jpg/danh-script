@@ -96,6 +96,12 @@ function migrate(d: Database.Database): void {
   if (!assetCols.some((c) => c.name === 'source')) {
     d.exec("ALTER TABLE assets ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'")
   }
+
+  // Gu đạo diễn chọn ở đầu dự án (skills/directors/<id>.md). DB cũ mở được: cột NULL.
+  const projCols = d.prepare('PRAGMA table_info(projects)').all() as Array<{ name: string }>
+  if (!projCols.some((c) => c.name === 'director_id')) {
+    d.exec('ALTER TABLE projects ADD COLUMN director_id TEXT')
+  }
 }
 
 function resolveSchemaPath(): string {
@@ -521,6 +527,11 @@ export function updateProjectParams(id: number, paramsJson: string, styleId: str
   getDb()
     .prepare('UPDATE projects SET params_json = ?, style_id = ? WHERE id = ?')
     .run(paramsJson, styleId, id)
+}
+
+/** Ghi gu đạo diễn chọn ở đầu dự án (chảy vào ledger mọi bước). */
+export function setProjectDirector(id: number, directorId: string): void {
+  getDb().prepare('UPDATE projects SET director_id = ? WHERE id = ?').run(directorId, id)
 }
 
 // ---------------- Tầng nguyên liệu (Visual System — gate_assets) ----------------

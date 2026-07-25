@@ -14,6 +14,7 @@ import type {
   ExportBundle,
   StyleOption,
   GenreOption,
+  DirectorOption,
   GateKey,
   AgentStep,
   AssetTag,
@@ -94,6 +95,7 @@ export interface DanhScriptApi {
   }
   project2: {
     setParams: (projectId: number, params: ProjectParams) => Promise<IpcResult<boolean>>
+    setDirector: (projectId: number, directorId: string) => Promise<IpcResult<boolean>>
   }
   assets: {
     list: (projectId: number) => Promise<IpcResult<AssetTag[]>>
@@ -118,6 +120,9 @@ export interface DanhScriptApi {
   }
   genres: {
     list: () => Promise<IpcResult<GenreOption[]>>
+  }
+  directors: {
+    list: () => Promise<IpcResult<DirectorOption[]>>
   }
   exporter: {
     build: (projectId: number) => Promise<IpcResult<ExportBundle>>
@@ -184,7 +189,9 @@ const api: DanhScriptApi = {
   },
   project2: {
     setParams: (projectId, params) =>
-      ipcRenderer.invoke('project:setParams', projectId, params)
+      ipcRenderer.invoke('project:setParams', projectId, params),
+    setDirector: (projectId, directorId) =>
+      ipcRenderer.invoke('project:setDirector', projectId, directorId)
   },
   assets: {
     list: (projectId) => ipcRenderer.invoke('asset:list', projectId),
@@ -205,6 +212,9 @@ const api: DanhScriptApi = {
   },
   genres: {
     list: () => ipcRenderer.invoke('genres:list')
+  },
+  directors: {
+    list: () => ipcRenderer.invoke('directors:list')
   },
   exporter: {
     build: (projectId) => ipcRenderer.invoke('export:build', projectId),
