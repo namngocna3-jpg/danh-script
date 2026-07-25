@@ -7,6 +7,11 @@ import { initDb } from './db'
 import { registerIpc } from './ipc'
 import { seedSkills } from './core/skillLoader'
 
+// Chữa "màn đen" trên Windows: compositor GPU của Chromium đôi khi không vẽ
+// frame đầu lên màn hình (DOM vẫn đủ). Tắt tăng tốc phần cứng để render bằng
+// phần mềm — app này chủ yếu là chữ nên không ảnh hưởng hiệu năng.
+app.disableHardwareAcceleration()
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1280,

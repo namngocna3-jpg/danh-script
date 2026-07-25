@@ -6,6 +6,7 @@ import {
   stepUnlocked,
   stepConfirmed,
   backStageFor,
+  stageRank,
   type StepKey
 } from '@shared/wizardSteps'
 import { useApp } from '../../store'
@@ -39,6 +40,10 @@ export function WizardView({ project }: { project: Project }): JSX.Element {
   const [step, setStep] = useState<StepKey>(() => stepFromStage(project.stage))
   const [editing, setEditing] = useState(false)
   const [redoing, setRedoing] = useState(false)
+  // "Chọn đạo diễn" khóa tới khi rời bước Chuẩn bị (chạy hoặc Bỏ qua). Dự án mở lại
+  // đã tiến quá 'draft' ⇒ hiển nhiên đã qua Chuẩn bị nên mở sẵn. Không ghi DB (giữ
+  // ràng buộc không migration) — chỉ là cờ phiên, reset theo project.id.
+  const [prepPassed, setPrepPassed] = useState(() => stageRank(project.stage) >= 0)
 
   // Đổi dự án → xóa state tạm, nhảy về bước phù hợp stage.
   // CHỈ phụ thuộc project.id: khi CHÍNH stage đổi (do vừa chốt) ta KHÔNG muốn
@@ -47,6 +52,7 @@ export function WizardView({ project }: { project: Project }): JSX.Element {
   useEffect(() => {
     resetForProject()
     setStep(stepFromStage(project.stage))
+    setPrepPassed(stageRank(project.stage) >= 0)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id, resetForProject])
 
@@ -108,12 +114,17 @@ export function WizardView({ project }: { project: Project }): JSX.Element {
         {WIZARD_STEPS.map((s, i) => {
           const active = s.key === step
           const done = stepConfirmed(s.key, project.stage)
-          const unlocked = stepUnlocked(s.key, project.stage)
+          // "Chọn đạo diễn" khóa thêm tới khi rời Chuẩn bị; các bước khác theo luật chung.
+          const unlocked =
+            stepUnlocked(s.key, project.stage) &&
+            (s.key !== 'director_pick' || prepPassed)
           // Bước phụ trợ (Tự động/Chuẩn bị/Chọn đạo diễn): confirmStage=null → LUÔN mở,
           // không tính vào khóa tuần tự. Nói rõ để không hiểu nhầm là "bỏ qua thứ tự".
           const helper = s.confirmStage === null
           const tip = !unlocked
-            ? 'Chốt các bước trước để mở khóa bước này'
+            ? s.key === 'director_pick'
+              ? 'Xong bước Chuẩn bị (chạy hoặc Bỏ qua) để mở khóa Chọn đạo diễn'
+              : 'Chốt các bước trước để mở khóa bước này'
             : helper
               ? 'Bước phụ trợ — luôn mở, không cần chốt tuần tự (chỉ các bước sinh nội dung mới khóa lần lượt)'
               : undefined
@@ -177,7 +188,13 @@ export function WizardView({ project }: { project: Project }): JSX.Element {
       {/* Nội dung cổng — THỨ TỰ MỚI: Nháp trước Ý đồ */}
       {step === 'auto' && <OrchestratorPanel projectId={project.id} />}
       {step === 'prep' && (
-        <PrepPanel projectId={project.id} onDone={() => advance('director_pick')} />
+        <PrepPanel
+          projectId={project.id}
+          onDone={() => {
+            setPrepPassed(true)
+            advance('director_pick')
+          }}
+        />
       )}
       {step === 'director_pick' && (
         <DirectorPickerPanel
