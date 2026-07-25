@@ -6,8 +6,25 @@
 
 export interface QueueOptions {
   intervalMs?: number // giãn cách giữa 2 task (mặc định 800ms)
-  timeoutMs?: number // timeout mỗi task (mặc định 60s)
-  maxRetries?: number // số lần thử lại (mặc định 2)
+  timeoutMs?: number // timeout mỗi task (mặc định 120s — tool-use prompt dài)
+  maxRetries?: number // số lần thử lại (mặc định 4 — 9router hay chờn 502/reset)
+}
+
+/**
+ * Lỗi TẠM THỜI đáng thử lại: 5xx cổng gom (502/503/504), quá tải (429), timeout,
+ * hoặc kết nối bị reset/đứt. 9router hay "fetch connect timeout (reset after 2s)".
+ * Lỗi KHÔNG tạm thời (400 sai schema, 401 sai key) thì thử lại vô ích → để nổi ngay.
+ */
+function isTransient(err: unknown): boolean {
+  const m = String((err as Error)?.message ?? err).toLowerCase()
+  return (
+    /\b(429|500|502|503|504)\b/.test(m) ||
+    m.includes('timeout') ||
+    m.includes('reset') ||
+    m.includes('econnreset') ||
+    m.includes('fetch failed') ||
+    m.includes('connect')
+  )
 }
 
 interface QueueItem<T> {
@@ -26,8 +43,8 @@ export class TaskQueue {
 
   constructor(opts: QueueOptions = {}) {
     this.intervalMs = opts.intervalMs ?? 800
-    this.timeoutMs = opts.timeoutMs ?? 60_000
-    this.maxRetries = opts.maxRetries ?? 2
+    this.timeoutMs = opts.timeoutMs ?? 120_000
+    this.maxRetries = opts.maxRetries ?? 4
   }
 
   /** Đẩy 1 task vào hàng đợi. Trả promise kết quả. */
@@ -57,12 +74,15 @@ export class TaskQueue {
         const result = await this.withTimeout(item.task())
         item.resolve(result)
       } catch (err) {
-        if (item.retriesLeft > 0) {
-          // Cây recovery: retry với backoff + tăng nhẹ khoảng chờ
+        // Chỉ retry lỗi TẠM THỜI (502/reset/timeout của 9router…). Lỗi cứng (400/401)
+        // thử lại vô ích → trả về ngay cho UI.
+        if (item.retriesLeft > 0 && isTransient(err)) {
+          const attempt = this.maxRetries - item.retriesLeft // 0,1,2,3…
           item.retriesLeft -= 1
-          const backoff =
-            this.intervalMs * (this.maxRetries - item.retriesLeft + 1)
-          await sleep(backoff)
+          // Backoff lũy thừa + jitter: 1s, 2s, 4s, 8s (±25%) — chờ 9router hồi.
+          const base = 1000 * 2 ** attempt
+          const jitter = base * 0.25 * Math.random()
+          await sleep(base + jitter)
           this.queue.unshift(item)
         } else {
           item.reject(err)

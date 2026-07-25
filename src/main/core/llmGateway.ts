@@ -130,7 +130,7 @@ export async function chatToolTurn(
   }
   // Tool-use đi qua Anthropic Messages API. Cổng gom (9router/beeknoee) cũng phơi
   // endpoint /v1/messages tương thích Anthropic → dùng chung, chỉ khác auth/URL.
-  const res = await fetch(messagesUrl(cfg.baseUrl), {
+  const res = await fetchWithTimeout(messagesUrl(cfg.baseUrl), {
     method: 'POST',
     headers: anthropicHeaders(cfg),
     body: JSON.stringify({
@@ -164,6 +164,30 @@ export async function chatToolTurn(
       input: (c.input as Record<string, unknown>) ?? {}
     }))
   return { text, toolUses, stopReason: json.stop_reason, rawContent: content }
+}
+
+/**
+ * fetch có hạn giờ CỨNG: nếu 9router treo socket (nhận request nhưng không trả),
+ * AbortController cắt sau `ms` và ném lỗi "timeout" → queue.ts retry ngay thay vì
+ * đợi đủ timeout hàng đợi. Mặc định 90s (< 120s của queue để queue còn kịp thử lại).
+ */
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  ms = 90_000
+): Promise<Response> {
+  const ac = new AbortController()
+  const t = setTimeout(() => ac.abort(), ms)
+  try {
+    return await fetch(url, { ...init, signal: ac.signal })
+  } catch (err) {
+    if ((err as Error)?.name === 'AbortError') {
+      throw new Error(`fetch timeout sau ${ms}ms (provider treo — sẽ thử lại)`)
+    }
+    throw err
+  } finally {
+    clearTimeout(t)
+  }
 }
 
 /**
@@ -243,7 +267,7 @@ async function chatAnthropic(
     .filter((m) => m.role !== 'system')
     .map((m) => ({ role: m.role, content: m.content }))
 
-  const res = await fetch(messagesUrl(cfg.baseUrl), {
+  const res = await fetchWithTimeout(messagesUrl(cfg.baseUrl), {
     method: 'POST',
     headers: anthropicHeaders(cfg),
     body: JSON.stringify({
@@ -276,7 +300,7 @@ async function chatOpenAICompatible(
   const msgs = opts.system
     ? [{ role: 'system', content: opts.system }, ...messages]
     : messages
-  const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
+  const res = await fetchWithTimeout(`${cfg.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
