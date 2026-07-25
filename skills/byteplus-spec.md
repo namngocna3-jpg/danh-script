@@ -116,6 +116,34 @@ Từ chuyển động máy (tả bằng câu tự nhiên): `push in / slow push`
 - Prompt KHÔNG được mâu thuẫn nội dung ảnh / tham số cơ bản.
 - Ảnh đơn + text đủ tái tạo chuyển động thật + vật lý vải (cloth physics).
 
+### 7a · ⭐⭐ NGUỒN KHUNG ĐẦU = ẢNH GATE 2 CỦA CHÍNH BLOCK NÀY (không phải ảnh nguyên liệu)
+
+App theo pipeline **image-to-video CHUẨN**: mỗi block ở GATE 2 đã sinh prompt ẢNH KHUNG ĐẦU → người dùng render ra 1 ảnh THẬT của cảnh đó (VD ảnh Cảnh 1.1) → ảnh này chính là **KHUNG ĐẦU (@Image1)** của prompt video block 1.1. KHÔNG phải lấy thẳng ảnh nguyên liệu @LAN/@SERUM làm khung đầu — ảnh nguyên liệu chỉ là tư liệu để DỰNG ảnh khung đầu ở GATE 2.
+
+```
+Cảnh 1.1 → prompt ẢNH (GATE 2) → render → ẢNH 1.1 ──┐
+                                                     ├→ @Image1 (first frame) của video 1.1
+Cảnh 1.1 → prompt VIDEO (GATE 3) = LÀM ĐỘNG ẢNH 1.1 ─┘
+```
+
+**Prompt video BẮT BUỘC mở `scene` bằng:** `@Image1 as the first frame` (ảnh đã render của chính block này). App tự in dòng `FIRST FRAME: upload ảnh Cảnh X.Y` khi xuất — người dùng đính đúng ảnh đó vào Coco.
+
+### 7b · CÁCH B — GIỮ KHUNG ĐẦU + KHÓA @tag DANH TÍNH (chuẩn app này)
+
+App chọn **Cách B**: vừa dùng ảnh khung đầu (1.1), VỪA giữ @tag nhân vật/sản phẩm + câu khóa danh tính. Lý do: nhân vật cử động mạnh / xoay lộ góc mới / block dài nhiều cut → chỉ ảnh khung đầu dễ trôi mặt; @tag kéo lại.
+
+**Công thức `scene` (video, khi đã có ảnh khung đầu):**
+```
+@Image1 as the first frame; <CHỈ tả thay đổi/diễn biến — KHÔNG tả lại ngoại hình/bối cảnh/trang phục>
+```
+**Công thức `constraints` (thêm câu khóa):**
+```
+preserve @LAN's face and outfit exactly, 100% matches the reference, stable consistent face, natural anatomy
+```
+- Nhúng @tag ở `scene` cho nhân vật/sản phẩm ĐANG diễn (khóa danh tính), KHÔNG nhồi mọi @tag của dự án.
+- ❌ VẪN CẤM tả lại mặt/dáng/váy/phòng bằng lời — ảnh 1.1 + @tag lo. Chỉ tả ĐỘNG.
+- Block **tĩnh/động nhẹ** (chỉ quay đầu, gió thổi): @tag + câu khóa có thể GỌN 1 câu. Block **động mạnh/nhiều cut**: khóa đậm hơn (nhắc @tag ở mỗi shot).
+
 ---
 
 ## 8 · ⭐ HỆ THỐNG @ REFERENCE (khóa nhân vật/sản phẩm/style — TRÁI TIM Seedance 2.x)

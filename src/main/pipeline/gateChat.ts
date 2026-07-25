@@ -162,8 +162,9 @@ const CHAT_GATES: Record<string, ChatGateSpec> = {
     kickoff:
       'Người dùng vừa mở cổng PROMPT VIDEO. BƯỚC 0 (đọc-trước-khi-làm): đọc ideal + read_blocks (KHỐI PHÂN CẢNH shot_panel: camera_move/shot_size/action_start→action_end + image_prompt_en đã có prompt ẢNH KHUNG ĐẦU GATE 2) + @tag (read_assets); CẤM bịa block/asset không có trong sổ. ' +
       'LUẬT VÀNG image-to-video: mỗi block ĐÃ CÓ ảnh khung đầu (nhân vật/bối cảnh/trang phục/đạo cụ đã đứng yên trong ảnh) → prompt video CHỈ LÀM ĐỘNG ảnh đó, CẤM tả lại ngoại hình/bối cảnh/trang phục. SCENE ngắn (chỉ thay đổi/diễn biến), MOTION mang tải chính. ' +
+      'CÁCH B — KHUNG ĐẦU BẮT BUỘC: ảnh khung đầu của block chính là ẢNH GATE 2 ĐÃ RENDER của ĐÚNG block đó (KHÔNG phải ảnh nguyên liệu @tag rời). SCENE PHẢI mở đầu bằng đúng cụm "@Image1 as the first frame;" rồi mới tả thay đổi/diễn biến. @tag chỉ dùng để KHÓA danh tính (giữ mặt/trang phục), KHÔNG phải nguồn khung đầu. ' +
       'MOTION bám action_start→action_end trong shot_panel; camera bám camera_move/shot_size đã chốt. ' +
-      'MULTI-SHOT (mọi thể loại): block được 1–3 shot (CUT-by-CUT) cắt bằng "Cut to"/"Lens switch to", mỗi shot khóa lại @tag để không drift; MOTION tả tư thế START→END + chi tiết vật lý (cấm động từ mơ hồ); CONSTRAINTS thêm 1 positive lock riêng block (danh tính @tag + vị trí + số lượng). ' +
+      'MULTI-SHOT (mọi thể loại): block được 1–3 shot (CUT-by-CUT) cắt bằng "Cut to"/"Lens switch to", mỗi shot khóa lại @tag để không drift; MOTION tả tư thế START→END + chi tiết vật lý (cấm động từ mơ hồ); CONSTRAINTS thêm câu "preserve @tag face and outfit exactly, 100% matches the reference" + 1 positive lock riêng block (danh tính @tag + vị trí + số lượng). ' +
       'Chào ngắn rồi dựng prompt video (STYLE/SCENE/MOTION/AUDIO/CONSTRAINTS + TEXT_OVERLAY nếu cần) cho MỖI block. ' +
       'Cuối cùng gọi read_coverage để chắc KHÔNG block nào thiếu video. Hỏi nếu chưa rõ.'
   }

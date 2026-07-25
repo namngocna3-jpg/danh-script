@@ -176,7 +176,9 @@ function BlockCard({
   videoPrompt: VideoPrompt | null
   stylePrefix: string | null
 }): JSX.Element {
-  const videoText = videoPrompt ? videoPromptToText(videoPrompt, stylePrefix) : ''
+  const videoText = videoPrompt
+    ? videoPromptToText(videoPrompt, stylePrefix, { scene: sceneOrder, block: blockOrder })
+    : ''
   return (
     <div className="card p-4">
       <div className="mb-3 flex items-center gap-2">
@@ -237,10 +239,22 @@ function PromptBox({
 }
 
 /** Gộp các trường video prompt thành text copy được (Seedance đọc CONSTRAINTS, bỏ NEGATIVE). */
-function videoPromptToText(v: VideoPrompt, stylePrefix?: string | null): string {
+function videoPromptToText(
+  v: VideoPrompt,
+  stylePrefix?: string | null,
+  frameRef?: { scene: number; block: number }
+): string {
   const lines: string[] = []
   if (stylePrefix?.trim()) {
     lines.push(`STYLE PREFIX (dán verbatim vào đầu mọi prompt):\n${stylePrefix.trim()}\n---`)
+  }
+  // ⭐ IMAGE-TO-VIDEO: ảnh khung đầu của CHÍNH block này (đã render ở GATE 2) = @Image1.
+  // Nhắc người dùng upload ĐÚNG ảnh cảnh X.Y làm khung đầu — trước đây thiếu dòng này nên
+  // dễ upload nhầm ảnh / không biết prompt video dựa trên ảnh nào.
+  if (frameRef) {
+    lines.push(
+      `FIRST FRAME (BẮT BUỘC upload ẢNH đã render của Cảnh ${frameRef.scene}.${frameRef.block} làm @Image1):`
+    )
   }
   lines.push(
     `STYLE: ${v.style}`,
@@ -392,7 +406,14 @@ function bundleToMarkdown(bundle: ExportBundle): string {
     L.push('')
     L.push('**Prompt VIDEO:**')
     L.push('```')
-    L.push(b.video_prompt ? videoPromptToText(b.video_prompt) : '(trống)')
+    L.push(
+      b.video_prompt
+        ? videoPromptToText(b.video_prompt, null, {
+            scene: b.scene_order,
+            block: b.block_order
+          })
+        : '(trống)'
+    )
     L.push('```')
     L.push('')
   }

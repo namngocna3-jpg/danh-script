@@ -536,7 +536,7 @@ const writeVideoPrompt: ToolDef = {
         scene: {
           type: 'string',
           description:
-            'CHỈ mô tả CHUYỂN ĐỘNG & THAY ĐỔI diễn ra trong cảnh so với ẢNH KHUNG ĐẦU (GATE 2). CẤM tả lại nhân vật/bối cảnh/trang phục/đạo cụ đã đứng yên trong ảnh — chúng đã có sẵn. Ngắn gọn, nhường tải cho MOTION.'
+            '⭐ MỞ ĐẦU BẮT BUỘC bằng "@Image1 as the first frame;" — ảnh KHUNG ĐẦU = ảnh ĐÃ RENDER của CHÍNH block này ở GATE 2 (VD ảnh Cảnh 1.1), KHÔNG phải ảnh nguyên liệu thô. Sau đó CHỈ mô tả CHUYỂN ĐỘNG & THAY ĐỔI so với khung đầu; nhúng @tag nhân vật/sản phẩm ĐANG diễn để khóa danh tính. CẤM tả lại mặt/dáng/bối cảnh/trang phục đã đứng yên trong ảnh. Ngắn gọn, nhường tải cho MOTION.'
         },
         motion: {
           type: 'string',
@@ -547,7 +547,7 @@ const writeVideoPrompt: ToolDef = {
         constraints: {
           type: 'string',
           description:
-            'Ràng buộc POSITIVE cho Seedance (câu khẳng định thay cho negative): sharp focus, five fingers, natural anatomy, stable face, consistent outfit within the scene... ⭐ THÊM 1 positive lock riêng block: nhắc lại danh tính @tag + vị trí + SỐ LƯỢNG vật/người (VD "exactly one bottle of @SERUM, label faces camera, @LAN stays on the left, 100% matches the reference").'
+            'Ràng buộc POSITIVE cho Seedance (câu khẳng định thay cho negative): sharp focus, five fingers, natural anatomy, stable face, consistent outfit within the scene... ⭐ CÁCH B (khóa danh tính khi có ảnh khung đầu): THÊM câu "preserve @LAN face and outfit exactly, 100% matches the reference" + positive lock riêng block: nhắc lại danh tính @tag + vị trí + SỐ LƯỢNG vật/người (VD "exactly one bottle of @SERUM, label faces camera, @LAN stays on the left"). Block động mạnh/nhiều cut → khóa đậm hơn.'
         },
         negative: { type: 'string' },
         text_overlay: {
