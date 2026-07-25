@@ -43,9 +43,32 @@ Tả cử động tối giản, tư thế đầu→cuối + độ chậm có ki�
 Ambient/piano tối giản, dây trầm, hoặc beat downtempo tinh tế. Nhiều khoảng lặng.
 Tiếng động sạch, gợi cảm: nắp hộp mở, vải sột nhẹ, giọt nước hoa.
 
-## 7. Nhắc vật lý cho Seedance 2.0
+## 7. Nhắc vật lý cho Seedance 2.0 (theo từng scheme ánh sáng)
 - Chuyển động chậm phơi bày lỗi rõ nhất → đặc tả trọng tâm/quán tính kỹ: tay nâng
   sản phẩm theo lực cổ tay, vải rơi theo trọng lực đúng độ nặng.
 - Mốc giây 5–8: giữ chuyển động mượt liên tục, không "khựng".
 - Khóa @tag sản phẩm + nhãn hướng camera (label faces camera) mỗi cảnh, số lượng
   chính xác (exactly one), chống biến dạng logo.
+- **Scheme A (soft directional):** gradient dịu trên bề mặt cao cấp dễ bị "phẳng" khi
+  máy trượt — nhắc giữ chuyển sáng-tối mượt liên tục theo góc nguồn cố định.
+- **Scheme B (chiaroscuro):** ranh sáng-tối rõ phải DỊCH mượt khi orbit; giây 5–8
+  đừng để mảng tối "nuốt" mất chi tiết sản phẩm đột ngột.
+- **Scheme C (specular kiểm soát):** highlight sắc trên kim loại/thủy tinh phải trượt
+  gọn theo bề mặt khi vật xoay — 1 điểm sáng sạch, không tách thành nhiều đốm loạn.
+- **Scheme D (high-key tinh khiết):** nền trắng đều dễ bị bệt khi có chuyển động —
+  giữ tách khối sản phẩm khỏi nền bằng bóng đổ tinh tế.
+
+## 8. Bảng storyboard mẫu (shot_size · camera_move · beat cảm xúc)
+Khuôn 3 nhịp tiết chế cho sản phẩm premium — ít mà chất:
+| # | shot_size | camera_move | beat cảm xúc |
+|---|-----------|-------------|--------------|
+| 1 | wide sạch (khoảng trống) | slider tuyến tính chậm | thiết lập — sản phẩm trong không gian tối giản |
+| 2 | macro (chi tiết đắt) | orbit rất chậm quanh sản phẩm | khao khát — phơi texture cao cấp, giây 5–8 mượt |
+| 3 | medium (talent/packshot) | dolly nhẹ / tĩnh | trân trọng — ngón tay chạm nhẹ, logo hướng máy |
+
+## 9. Ngôn ngữ máy chi tiết (lens/FOV theo cảm xúc)
+- **Chi tiết cao cấp:** 100mm macro, DoF cực nông, bokeh tròn sạch → cô lập texture.
+- **Thanh lịch / talent:** 85mm, nén nhẹ, da mịn không méo, phông tan mượt.
+- **Không gian sang / khoảng trống:** 50mm cân đối, để "âm bản" (negative space) kể
+  sự đắt tiền; tránh lens rộng làm khung "ồn".
+- Chuyển động máy luôn tuyến tính chậm; cấm whip/crash (phá tiết chế).

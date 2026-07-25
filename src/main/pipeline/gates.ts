@@ -12,10 +12,12 @@ import {
   composeSystem,
   injectStyleAnchor,
   injectOutputIntent,
-  loadStyleAnchor
+  loadStyleAnchor,
+  loadDirectorPersona
 } from '../core/skillLoader'
 import { toolsFor } from '../tools'
 import { workerSpec } from './workerSpecs'
+import { directorSystemBlock } from './gateChat'
 import { availableCraftFor, availableSkillsPrompt } from '../core/craftRegistry'
 import { chat } from '../core/llmGateway'
 import { llmQueue } from '../core/queue'
@@ -40,7 +42,8 @@ import type {
   VisualSystem,
   AssetFull,
   IdealBrief,
-  ShotPanel
+  ShotPanel,
+  DirectorBriefResult
 } from '../../shared/types'
 
 /** Định nghĩa 1 cổng chạy được bằng agent-thợ. */
@@ -174,9 +177,17 @@ export async function runGate(
   if (gateKey === 'scriptwright') craft = craft.filter((c) => c.axis !== 'story')
   const craftBlock = availableSkillsPrompt(craft)
 
+  // Gu đạo diễn (ưu tiên Director Bible, fallback persona) — nối vào ĐẦU system như đường chat,
+  // để đường 1-phát KHÔNG bỏ sót kim chỉ nam thẩm mỹ.
+  const directorBlock = directorSystemBlock(projectId)
+  const baseSystem = composeSystem(
+    loadExecutionSkill(project.pipeline, spec.worker),
+    ...layerParts,
+    craftBlock
+  )
   const system = injectOutputIntent(
     injectStyleAnchor(
-      composeSystem(loadExecutionSkill(project.pipeline, spec.worker), ...layerParts, craftBlock),
+      directorBlock ? `${directorBlock}\n\n${baseSystem}` : baseSystem,
       project.style_id
     ),
     projectId
@@ -249,6 +260,45 @@ export async function runPrep(
   )
 
   return { persona, research, steps: totalSteps }
+}
+
+// ---------------- Chốt gu → sinh Director Bible (chạy 1-phát) ----------------
+
+/**
+ * Chạy thợ directorBrief NGAY khi "chốt gu": đọc brief + persona thô (gu đã chọn) → sinh
+ * Director Bible (đã cá nhân hóa) ghi vào plan_artifacts kind='director_bible'.
+ * KHÔNG updateProjectStage (director_pick vẫn non-gating). Bỏ qua an toàn nếu chưa chọn gu.
+ */
+export async function runDirectorBrief(
+  projectId: number,
+  onStep?: (s: AgentStep) => void
+): Promise<DirectorBriefResult> {
+  const project = getProject(projectId)
+  if (!project) throw new Error('Không tìm thấy dự án')
+  if (!project.director_id) throw new Error('Chưa chọn gu đạo diễn')
+
+  const persona = loadDirectorPersona(project.director_id).trim()
+  const soul = loadExecutionSkill(project.pipeline, 'directorBrief')
+  // Persona thô (dày) đọc 1 LẦN ở đây → chưng thành bible; các bước sau chỉ nhận bible gọn.
+  const system = persona
+    ? `${soul}\n\n===== GU ĐẠO DIỄN GỐC (persona thô — cá nhân hóa cho brief này) =====\n\n${persona}`
+    : soul
+
+  const ideal = JSON.parse(project.ideal_json) as { raw: string }
+  const res = await runAgent({
+    system,
+    userPrompt:
+      'Đọc brief dự án (read_ideal) rồi CÁ NHÂN HÓA gu đạo diễn phía trên thành Director Bible cho phim này. ' +
+      'Ghi qua write_director_bible (1 lần). KHÔNG bịa cảnh/nhân vật.\n\nIDEAL:\n' +
+      ideal.raw,
+    tools: toolsFor(workerSpec('directorBrief').tools),
+    ctx: { projectId },
+    maxSteps: 8,
+    temperature: 0.5,
+    onStep
+  })
+
+  return { steps: res.steps }
 }
 
 // ---------------- Kiểm duyệt A/B/C/D ----------------

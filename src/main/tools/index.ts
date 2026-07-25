@@ -11,6 +11,7 @@ import type {
   StorySkeleton,
   AdaptationStrategy,
   DirectorPlan,
+  DirectorBible,
   VisualSystem,
   AssetRole,
   DeriveKind
@@ -18,6 +19,7 @@ import type {
 import {
   assertSkeleton,
   assertDirectorPlan,
+  assertDirectorBible,
   assertVideoPrompt,
   assertPlanShots,
   assertImagePrompt,
@@ -685,6 +687,59 @@ const writeDirectorPlan: ToolDef = {
   }
 }
 
+const writeDirectorBible: ToolDef = {
+  schema: {
+    name: 'write_director_bible',
+    description:
+      '⭐ HIẾN PHÁP THẨM MỸ (Director Bible): CÁ NHÂN HÓA gu đạo diễn (đã bơm sẵn vào system) cho ĐÚNG brief phim này. ' +
+      'KHÔNG bịa cảnh/nhân vật (chưa có kịch bản) — chỉ định hướng thẩm mỹ TỔNG: màu/sáng/chất liệu/máy quay/cảm xúc-mặt/âm thanh/vật lý Seedance. ' +
+      'Viết GỌN, mỗi field vài câu, sát brief (không chép nguyên persona). Gọi 1 lần; gọi lại để sửa cả bản.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        logline_visual: { type: 'string', description: '1 câu: phim này TRÔNG như thế nào (không kể cốt truyện).' },
+        color_script: { type: 'string', description: 'Bảng màu theo cung cảm xúc, áp brief này (mở→cao trào→kết).' },
+        lighting: { type: 'string', description: 'Scheme ánh sáng chọn (nguồn/độ tương phản/hướng).' },
+        texture: { type: 'string', description: 'Chất liệu/bề mặt nhấn (da/vải/kim loại/kính...). Tùy chọn.' },
+        camera_language: {
+          type: 'string',
+          description: 'Ngôn ngữ máy + nhịp cắt (lens/FOV theo cảm xúc, CUT-by-CUT: cắt nhanh/chậm, Cut to/Lens switch to).'
+        },
+        emotion_face: { type: 'string', description: 'Map cảm xúc → mặt/mắt/hình thể diễn viên. Tùy chọn.' },
+        sound_design: { type: 'string', description: 'Nhạc/ambient định hướng (nhịp/thể loại nhạc/tiếng nền). Tùy chọn.' },
+        physics_notes: {
+          type: 'string',
+          description: 'Vật lý Seedance áp cho phim: quán tính/trọng tâm, khóa @tag chống drift, điểm hỏng giây 5–8.'
+        },
+        do_dont: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '3–6 điều NÊN/TRÁNH cụ thể phim này (mỗi dòng 1 điều). Tùy chọn.'
+        }
+      },
+      required: ['logline_visual', 'color_script', 'lighting', 'camera_language', 'physics_notes']
+    }
+  },
+  handler: (input, ctx) => {
+    assertDirectorBible(input)
+    const project = db.getProject(ctx.projectId)
+    const bible: DirectorBible = {
+      director_id: project?.director_id ?? '',
+      logline_visual: input.logline_visual as string,
+      color_script: input.color_script as string,
+      lighting: input.lighting as string,
+      texture: (input.texture as string) ?? '',
+      camera_language: input.camera_language as string,
+      emotion_face: (input.emotion_face as string) ?? '',
+      sound_design: (input.sound_design as string) ?? '',
+      physics_notes: input.physics_notes as string,
+      do_dont: Array.isArray(input.do_dont) ? (input.do_dont as string[]) : []
+    }
+    db.saveDirectorBible(ctx.projectId, bible)
+    return { ok: true, director_id: bible.director_id }
+  }
+}
+
 // ---------------- Nhóm NGUYÊN LIỆU (gate_assets — Visual System) ----------------
 
 const deriveAssets: ToolDef = {
@@ -1005,6 +1060,7 @@ export const ALL_TOOLS: ToolDef[] = [
   readScriptFull,
   // đạo diễn
   writeDirectorPlan,
+  writeDirectorBible,
   // nguyên liệu
   deriveAssets,
   writeAssetPrompt,

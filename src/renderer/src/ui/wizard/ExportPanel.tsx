@@ -95,6 +95,7 @@ export function ExportPanel({ projectId }: { projectId: number }): JSX.Element {
           skeleton: bundle.skeleton,
           adaptation: bundle.adaptation,
           director: bundle.director,
+          directorBible: null,
           visualSystem: bundle.visualSystem
         }}
       />

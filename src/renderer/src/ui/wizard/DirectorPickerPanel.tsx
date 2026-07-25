@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useWizard } from '../../wizardStore'
+import { StepStream } from './StepStream'
 
 /**
  * BƯỚC "🎬 Chọn đạo diễn" — non-gating (chỉ ghi director_id, không khóa tuần tự).
@@ -19,9 +20,14 @@ export function DirectorPickerPanel({
   const directors = useWizard((s) => s.directors)
   const loadDirectors = useWizard((s) => s.loadDirectors)
   const setDirector = useWizard((s) => s.setDirector)
+  const runDirectorBrief = useWizard((s) => s.runDirectorBrief)
+  const running = useWizard((s) => s.running)
+  const steps = useWizard((s) => s.steps)
 
   const [picked, setPicked] = useState(current ?? '')
-  const [busy, setBusy] = useState(false)
+
+  const isRunning = running === 'director'
+  const busy = running !== null
 
   useEffect(() => {
     if (directors.length === 0) void loadDirectors()
@@ -29,12 +35,15 @@ export function DirectorPickerPanel({
 
   const canSave = picked.length > 0 && !busy
 
+  // Chốt gu = ghi director_id RỒI chạy thợ directorBrief sinh Director Bible (stream
+  // tiến độ như prep). Xong mới sang bước Kịch bản. Nếu thợ lỗi vẫn cho đi tiếp —
+  // ledger tự fallback về persona thô (dự án cũ chưa có bible cũng chạy được).
   async function save(): Promise<void> {
     if (!canSave) return
-    setBusy(true)
     const ok = await setDirector(projectId, picked)
-    setBusy(false)
-    if (ok) onDone()
+    if (!ok) return
+    await runDirectorBrief(projectId)
+    onDone()
   }
 
   return (
@@ -83,8 +92,16 @@ export function DirectorPickerPanel({
         </div>
       )}
 
+      {(isRunning || steps.length > 0) && (
+        <StepStream steps={steps} running={isRunning} />
+      )}
+
       <div className="flex items-center justify-between">
-        <button className="btn-ghost px-3 py-2 text-xs" onClick={onDone}>
+        <button
+          className="btn-ghost px-3 py-2 text-xs disabled:opacity-50"
+          disabled={busy}
+          onClick={onDone}
+        >
           Bỏ qua (chọn sau) →
         </button>
         <button
@@ -92,7 +109,7 @@ export function DirectorPickerPanel({
           disabled={!canSave}
           onClick={() => void save()}
         >
-          {busy ? 'Đang lưu…' : 'Chốt gu & tiếp tục →'}
+          {isRunning ? 'Đang sinh chỉ đạo…' : 'Chốt gu & sinh chỉ đạo →'}
         </button>
       </div>
     </div>

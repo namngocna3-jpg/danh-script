@@ -22,7 +22,7 @@ import { getPublicSettings, saveSettings, effectiveConfig } from './core/setting
 import type { Provider } from './core/llmGateway'
 import { listStyles, listGenres, listDirectors } from './core/skillLoader'
 import { runGate0 } from './pipeline/gate0'
-import { runGate, reviewGate, buildExport, runPrep } from './pipeline/gates'
+import { runGate, reviewGate, buildExport, runPrep, runDirectorBrief } from './pipeline/gates'
 import { runGateChat, gateChatHistory, confirmGate } from './pipeline/gateChat'
 import { runOrchestrator } from './pipeline/orchestrator'
 import {
@@ -355,6 +355,18 @@ export function registerIpc(): void {
     try {
       setProjectDirector(projectId, directorId)
       return ok(true)
+    } catch (err) {
+      return fail(err)
+    }
+  })
+
+  // ---- Chốt gu → thợ directorBrief sinh Director Bible (stream tiến độ như prep) ----
+  ipcMain.handle('director:brief', async (e, projectId: number) => {
+    try {
+      const result = await runDirectorBrief(projectId, (step) => {
+        e.sender.send('director:step', step)
+      })
+      return ok(result)
     } catch (err) {
       return fail(err)
     }

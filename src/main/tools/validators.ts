@@ -62,6 +62,22 @@ export function assertDirectorPlan(input: Record<string, unknown>): void {
   })
 }
 
+/** write_director_bible: các trường định hướng lõi không rỗng (khối chữ, không cần cảnh). */
+export function assertDirectorBible(input: Record<string, unknown>): void {
+  const required: Array<[string, string]> = [
+    ['logline_visual', '1 câu phim TRÔNG như thế nào'],
+    ['color_script', 'bảng màu theo cung cảm xúc'],
+    ['lighting', 'scheme ánh sáng'],
+    ['camera_language', 'ngôn ngữ máy + nhịp cắt'],
+    ['physics_notes', 'vật lý Seedance (quán tính, giây 5–8)']
+  ]
+  for (const [key, desc] of required) {
+    if (!isNonEmptyString(input[key])) {
+      throw new Error(`write_director_bible: thiếu "${key}" (${desc}). Điền rồi gọi lại.`)
+    }
+  }
+}
+
 /** write_video_prompt: đủ trường bắt buộc theo VideoPrompt (scene_order/block_order số; style/scene/motion không rỗng). */
 export function assertVideoPrompt(input: Record<string, unknown>): void {
   if (!isFiniteNumber(input.scene_order)) {

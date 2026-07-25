@@ -78,7 +78,7 @@ const PLAN_STAGES: ReadonlySet<string> = new Set([
 ])
 
 interface WizardState {
-  running: GateId | 'prep' | null
+  running: GateId | 'prep' | 'director' | null
   steps: AgentStep[]
   prepResult: PrepResult | null
   gate0Result: Gate0Result | null
@@ -112,6 +112,7 @@ interface WizardState {
   loadGenres: () => Promise<void>
   loadDirectors: () => Promise<void>
   setDirector: (projectId: number, directorId: string) => Promise<boolean>
+  runDirectorBrief: (projectId: number) => Promise<boolean>
   runPrep: (projectId: number) => Promise<boolean>
   runGate0: (projectId: number) => Promise<boolean>
   runGate: (gate: OneShotGate, projectId: number) => Promise<boolean>
@@ -200,6 +201,25 @@ export const useWizard = create<WizardState>((set, get) => ({
     }
     set({ wizardError: res.error })
     return false
+  },
+
+  // Chốt gu → thợ directorBrief sinh Director Bible (stream tiến độ như prep).
+  async runDirectorBrief(projectId) {
+    set({ running: 'director', steps: [], wizardError: null })
+    const off = window.danh.director.onStep((step) =>
+      set((s) => ({ steps: [...s.steps, step] }))
+    )
+    try {
+      const res = await window.danh.director.brief(projectId)
+      if (res.ok) {
+        set({ running: null })
+        return true
+      }
+      set({ wizardError: res.error, running: null })
+      return false
+    } finally {
+      off()
+    }
   },
 
   async runPrep(projectId) {

@@ -42,9 +42,33 @@ Tả tư thế START→END + lực (bung/đẩy/nảy), cấm "nhảy", "chạy"
 Beat điện tử/hip-hop tempo cao, drop trùng nhịp cắt và lộ CTA. SFX nhấn: whoosh
 theo whip-pan, "pop"/"ting" khi sản phẩm hiện, bass khi chốt.
 
-## 7. Nhắc vật lý cho Seedance 2.0
+## 7. Nhắc vật lý cho Seedance 2.0 (theo từng scheme ánh sáng)
 - Chuyển động nhanh vẫn phải đúng vật lý: chất lỏng rót theo trọng lực + độ nhớt,
   vải bay theo quán tính. Tránh "giật khung" phi lý.
 - Mốc giây 5–8 (nơi Seedance hay hỏng): đặc tả rõ cú chuyển/cắt ở đây, đừng để
   chuyển động "loạn".
 - Multi-shot: mỗi cắt khóa lại @tag sản phẩm + vị trí (positive lock) chống teleport.
+- **Scheme A (high-key):** nền sáng đều → khi orbit nhanh quanh sản phẩm, giữ phơi
+  sáng ổn định, đừng để nền "nhấp nháy" trắng khi máy xoay.
+- **Scheme B (hard light):** specular highlight trên kim loại/lon phải TRƯỢT theo
+  bề mặt khi vật xoay — mô tả điểm sáng di chuyển, không "dán chết" một chỗ.
+- **Scheme C (neon/gradient):** 2 nguồn màu → khi whip-pan, hai vệt màu phải nhòe
+  theo hướng pan nhất quán; tránh loang màu vô hướng ở giây 5–8.
+- **Scheme D (rim mạnh):** viền sáng dày dễ bị crash-zoom làm "cháy" — nhắc giữ độ
+  dày viền ổn định qua cú zoom.
+
+## 8. Bảng storyboard mẫu (shot_size · camera_move · beat cảm xúc)
+Khuôn 3 nhịp hook-demo-CTA cho TVC năng lượng cao:
+| # | shot_size | camera_move | beat cảm xúc |
+|---|-----------|-------------|--------------|
+| 1 | close/medium (hook) | crash-zoom / whip-pan vào | 2s đầu bắt mắt — màu thương hiệu áp đảo |
+| 2 | macro + medium (demo) | orbit nhanh / snap quanh sản phẩm | phấn khích — "wow" sản phẩm, cao trào giây 5–8 |
+| 3 | medium (CTA) | push-in dứt khoát | chốt — logo + CTA punch màu, drop nhạc trùng cắt |
+
+## 9. Ngôn ngữ máy chi tiết (lens/FOV theo cảm xúc)
+- **Hook / bùng năng lượng:** 24–28mm rộng, cận sát → cường điệu tốc độ, phối cảnh
+  "lao vào mặt". Crash-zoom hợp lens rộng.
+- **Trình diễn sản phẩm:** 100mm macro cho chi tiết ngon (giọt nước, texture), hoặc
+  50mm cho orbit sạch.
+- **Tự tin / ngầu (talent):** 35mm ngang tầm, hơi thấp (low angle) tôn khí chất.
+- Ưu tiên chuyển động máy mạnh nhưng 1 kỹ thuật "đắt" (bullet-time/360°) tối đa 1 lần.

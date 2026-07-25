@@ -21,6 +21,7 @@ import type {
   AdaptationStrategy,
   PlanArtifacts,
   DirectorPlan,
+  DirectorBible,
   VisualSystem,
   AssetFull,
   AssetDerivative,
@@ -738,6 +739,7 @@ export type PlanArtifactKind =
   | 'skeleton'
   | 'adaptation'
   | 'director'
+  | 'director_bible'
   | 'visual_system'
 
 /** Ghi đè 1 artifact kế hoạch (draft|skeleton|adaptation|visual_system) theo (project, kind). */
@@ -787,7 +789,8 @@ export function getPlanArtifacts(projectId: number): PlanArtifacts {
     skeleton: loadPlanArtifact<StorySkeleton>(projectId, 'skeleton'),
     adaptation: loadPlanArtifact<AdaptationStrategy>(projectId, 'adaptation'),
     director: loadPlanArtifact<DirectorPlan>(projectId, 'director'),
-    visualSystem: loadPlanArtifact<VisualSystem>(projectId, 'visual_system')
+    visualSystem: loadPlanArtifact<VisualSystem>(projectId, 'visual_system'),
+    directorBible: loadPlanArtifact<DirectorBible>(projectId, 'director_bible')
   }
 }
 
@@ -809,6 +812,11 @@ export function saveDirectorPlan(projectId: number, plan: DirectorPlan): void {
 /** Ghi hệ thống thị giác / Color Script (gate_assets). */
 export function saveVisualSystem(projectId: number, vs: VisualSystem): void {
   savePlanArtifact(projectId, 'visual_system', vs)
+}
+
+/** Ghi hiến pháp thẩm mỹ / Director Bible (chốt gu ở đầu dự án). */
+export function saveDirectorBible(projectId: number, b: DirectorBible): void {
+  savePlanArtifact(projectId, 'director_bible', b)
 }
 
 // ---------------- Kiểm duyệt A/B/C/D lưu DB (Pha 4) ----------------

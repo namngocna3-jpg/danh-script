@@ -8,6 +8,7 @@ import type {
   Project,
   ProjectParams,
   PrepResult,
+  DirectorBriefResult,
   Gate0Result,
   GateResult,
   ReviewResult,
@@ -124,6 +125,10 @@ export interface DanhScriptApi {
   directors: {
     list: () => Promise<IpcResult<DirectorOption[]>>
   }
+  director: {
+    brief: (projectId: number) => Promise<IpcResult<DirectorBriefResult>>
+    onStep: (cb: (step: AgentStep) => void) => () => void
+  }
   exporter: {
     build: (projectId: number) => Promise<IpcResult<ExportBundle>>
     saveFile: (defaultName: string, content: string) => Promise<IpcResult<string | null>>
@@ -215,6 +220,14 @@ const api: DanhScriptApi = {
   },
   directors: {
     list: () => ipcRenderer.invoke('directors:list')
+  },
+  director: {
+    brief: (projectId) => ipcRenderer.invoke('director:brief', projectId),
+    onStep: (cb) => {
+      const listener = (_e: unknown, step: AgentStep): void => cb(step)
+      ipcRenderer.on('director:step', listener)
+      return () => ipcRenderer.removeListener('director:step', listener)
+    }
   },
   exporter: {
     build: (projectId) => ipcRenderer.invoke('export:build', projectId),

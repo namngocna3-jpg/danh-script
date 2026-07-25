@@ -42,8 +42,30 @@ Tả biểu cảm THẬT, có khuyết điểm nhỏ (chớp mắt lệch, nuố
 Nhạc nền tối thiểu, có thể để tiếng hiện trường dẫn (room tone, tiếng ngoài). Nếu
 có nhạc: mộc, acoustic guitar/piano thưa, không lấn giọng thật.
 
-## 7. Nhắc vật lý cho Seedance 2.0
+## 7. Nhắc vật lý cho Seedance 2.0 (theo từng scheme ánh sáng)
 - Chuyển động đời thường phải tự nhiên: cầm cốc theo lực thật, ngồi dịch ghế đúng
   trọng lượng. Handheld nhẹ nhưng KHÔNG rung phi lý.
 - Mốc giây 5–8: giữ cử động nhỏ liên tục tự nhiên (thở, chớp mắt), tránh "đơ".
 - Khóa @tag nhân vật + bối cảnh để mặt/nơi chốn nhất quán giữa các B-roll.
+- **Scheme A (cửa sổ tự nhiên):** nguồn cửa sổ cố định → khi handheld dịch nhẹ, bóng
+  trên mặt phải ổn định theo hướng cửa; đừng để da "nhấp nháy" sáng-tối phi lý.
+- **Scheme B (available light):** nhiều nguồn đời thật (đèn trần + cửa) → giữ cân bằng
+  trắng nhất quán, tránh ám màu đổi đột ngột giữa cut ở giây 5–8.
+- **Scheme C (phỏng vấn 3 điểm nhẹ):** key mềm phải bám mặt khi nhân vật gật/nghiêng;
+  giữ catchlight trong mắt liên tục — mất catchlight là lộ giả.
+
+## 8. Bảng storyboard mẫu (shot_size · camera_move · beat cảm xúc)
+Khuôn 3 nhịp phỏng vấn + B-roll cho testimonial đáng tin:
+| # | shot_size | camera_move | beat cảm xúc |
+|---|-----------|-------------|--------------|
+| 1 | medium (phỏng vấn) | handheld tĩnh nhẹ, hơi thở khung | chân thành — giao tiếp mắt, ngập ngừng thật |
+| 2 | close-up (mắt/tay) hoặc B-roll | lia chậm theo hành động | xúc động — chi tiết thật, mắt ẩm ở giây 5–8 |
+| 3 | medium-wide (bối cảnh) | quan sát tĩnh | tin cậy — môi trường kể nghề, giữ @tag nhân vật |
+
+## 9. Ngôn ngữ máy chi tiết (lens/FOV theo cảm xúc)
+- **Phỏng vấn / chân thành:** 50mm ngang tầm mắt, phối cảnh tự nhiên như người ngồi
+  đối diện — không nén, không méo, tạo tin cậy.
+- **Chi tiết xúc động (mắt/tay):** 85mm, DoF vừa (không quá "điện ảnh") để vẫn thật.
+- **B-roll môi trường:** 35mm quan sát, giữ đủ bối cảnh kể nghề nghiệp/đời sống.
+- Handheld có hồn (micro-rung), tránh gimbal quá mượt (làm mất chất tài liệu) và
+  tránh <28mm (méo = giả).

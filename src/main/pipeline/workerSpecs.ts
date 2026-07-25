@@ -16,6 +16,10 @@ export interface WorkerSpec {
 }
 
 export const WORKER_SPECS: Record<string, WorkerSpec> = {
+  directorBrief: {
+    tools: ['read_ideal', 'write_director_bible'],
+    layers: []
+  },
   directorPlanner: {
     tools: ['read_ideal', 'read_scenes', 'read_script_full', 'write_director_plan'],
     layers: ['storyboard-craft.md']

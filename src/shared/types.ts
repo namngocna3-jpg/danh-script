@@ -286,6 +286,26 @@ export interface DirectorScene {
 }
 
 /**
+ * ⭐ HIẾN PHÁP THẨM MỸ (Director Bible) — sinh khi "chốt gu" ở đầu dự án (SAU prep, TRƯỚC cảnh).
+ * Thợ directorBrief đọc brief + persona thô (gu đã chọn) rồi CÁ NHÂN HÓA cho phim này:
+ * chưng persona chung → 1 khối định hướng gọn, sát brief. Chảy vào ledger MỌI bước sau
+ * (thay khối persona thô). KHÁC DirectorPlan (đếm thoại/cảm xúc per-cảnh, sinh muộn) —
+ * Bible là ĐẦU VÀO định hướng cho DirectorPlan + VisualSystem, không đè lên chúng.
+ */
+export interface DirectorBible {
+  director_id: string // gu nguồn (skills/directors/<id>.md)
+  logline_visual: string // 1 câu: phim này TRÔNG như thế nào
+  color_script: string // bảng màu theo cung cảm xúc, áp brief này
+  lighting: string // scheme ánh sáng chọn cho phim này
+  texture: string // chất liệu/bề mặt nhấn
+  camera_language: string // ngôn ngữ máy + nhịp cắt (CUT-by-CUT)
+  emotion_face: string // map cảm xúc → mặt/mắt/hình thể
+  sound_design: string // nhạc/ambient định hướng
+  physics_notes: string // vật lý Seedance áp cho phim (quán tính, điểm hỏng giây 5–8)
+  do_dont: string[] // 3–6 điều NÊN/TRÁNH cụ thể phim này
+}
+
+/**
  * ⭐ HỆ THỐNG THỊ GIÁC toàn phim (Visual System, Toonflow Bước 1.4) — đồng bộ tông.
  * Color Script + ánh sáng + chất liệu; giữ tông nhất quán khi sinh ảnh nguyên liệu.
  */
@@ -330,6 +350,10 @@ export interface PrepResult {
   persona: string
   research: string
   steps: number
+}
+
+export interface DirectorBriefResult {
+  steps: number // số bước thợ directorBrief đã chạy để sinh Director Bible
 }
 
 export interface Gate0Result {
@@ -380,6 +404,7 @@ export interface PlanArtifacts {
   adaptation: AdaptationStrategy | null
   director: DirectorPlan | null // ⭐ quy hoạch đạo diễn (gate_director)
   visualSystem: VisualSystem | null // ⭐ hệ thống thị giác / Color Script (gate_assets)
+  directorBible: DirectorBible | null // ⭐ hiến pháp thẩm mỹ (chốt gu — sinh SỚM, trước cảnh)
 }
 
 export interface StyleOption {

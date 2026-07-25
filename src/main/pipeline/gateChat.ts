@@ -196,7 +196,7 @@ type InheritKey = 'brief' | 'draft' | 'skeleton' | 'adaptation' | 'director' | '
 function buildInheritedLedger(projectId: number, gateStage: string): string {
   // Gu đạo diễn (chọn đầu dự án) chảy vào MỌI bước — kể cả bước không có key kế thừa
   // (VD gate1a_draft): là kim chỉ nam thẩm mỹ xuyên suốt, đọc DB tươi mỗi lượt.
-  const directorBlock = buildDirectorBlock(projectId)
+  const directorBlock = directorSystemBlock(projectId)
 
   const keys = INHERIT_MAP[gateStage]
   if (!keys || keys.length === 0) return directorBlock
@@ -290,11 +290,31 @@ function buildInheritedLedger(projectId: number, gateStage: string): string {
 }
 
 /**
- * Khối GU ĐẠO DIỄN chọn ở đầu dự án (skills/directors/<id>.md).
- * Rỗng nếu dự án chưa chọn (director_id NULL — DB cũ vẫn chạy).
- * Đọc DB + file tươi mỗi lượt → đổi gu là mọi bước sau nhận ngay.
+ * Khối GU ĐẠO DIỄN chèn vào system MỌI bước (chat + 1-phát) — kim chỉ nam thẩm mỹ xuyên suốt.
+ * ƯU TIÊN Director Bible (đã cá nhân hóa cho phim này khi "chốt gu") → GỌN + SÁT brief.
+ * FALLBACK persona thô nếu có director_id mà CHƯA sinh bible (dự án cũ / bấm "Bỏ qua").
+ * Rỗng nếu chưa chọn gu (director_id NULL — DB cũ vẫn chạy). Đọc DB tươi mỗi lượt.
  */
-function buildDirectorBlock(projectId: number): string {
+export function directorSystemBlock(projectId: number): string {
+  const bible = getPlanArtifacts(projectId).directorBible
+  if (bible) {
+    const lines = [
+      `Logline hình ảnh: ${bible.logline_visual}`,
+      `Color script: ${bible.color_script}`,
+      `Ánh sáng: ${bible.lighting}`,
+      bible.texture && `Chất liệu: ${bible.texture}`,
+      `Ngôn ngữ máy + nhịp cắt: ${bible.camera_language}`,
+      bible.emotion_face && `Cảm xúc → mặt/mắt: ${bible.emotion_face}`,
+      bible.sound_design && `Âm thanh: ${bible.sound_design}`,
+      `Vật lý Seedance: ${bible.physics_notes}`,
+      bible.do_dont.length ? `NÊN/TRÁNH:\n${bible.do_dont.map((d) => `• ${d}`).join('\n')}` : ''
+    ].filter(Boolean)
+    return (
+      'CHỈ ĐẠO NGHỆ THUẬT CỦA PHIM (Director Bible — đã áp gu đạo diễn vào brief này; ' +
+      'mọi quyết định sáng/màu/nhịp/cảm xúc/máy quay phải NHẤT QUÁN, không tự đổi):\n\n' +
+      lines.join('\n')
+    )
+  }
   const project = getProject(projectId)
   const persona = loadDirectorPersona(project?.director_id).trim()
   if (!persona) return ''
