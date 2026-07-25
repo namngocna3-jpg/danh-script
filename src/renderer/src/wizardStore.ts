@@ -3,6 +3,7 @@
 // Giữ trạng thái tạm (không đụng DB): step stream, kết quả, review, styles, bundle.
 // ============================================================
 import { create } from 'zustand'
+import { useApp } from './store'
 import type {
   ProjectParams,
   AgentStep,
@@ -360,6 +361,10 @@ export const useWizard = create<WizardState>((set, get) => ({
     const res = await window.danh.gate.confirm(projectId, stage, force)
     if (res.ok) {
       set({ wizardError: null })
+      // Backend vừa ghi stage mới vào DB (updateProjectStage). Làm tươi activeProject
+      // để luật khóa bước (stageRank) đọc stage MỚI — nếu không, tab/step quá khứ vẫn
+      // tính theo stage cũ lúc mở DB → hiện 🔒 dù đã chốt, không bấm quay lại được.
+      await useApp.getState().refreshActiveProject()
       return true
     }
     set({ wizardError: res.error })
