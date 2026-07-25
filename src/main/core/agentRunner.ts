@@ -128,7 +128,13 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
           cfg
         ),
       // Nhà cung cấp treo/chậm → hàng đợi tự thử lại: báo UI để không đứng câm ở "0 bước".
-      (info) =>
+      (info) => {
+        // Log lỗi GỐC ra terminal để biết chậm vì gì (503/429/timeout/reset…).
+        console.warn(
+          `[LLM-RETRY] lần ${info.attempt}/${info.maxRetries} (chờ ${Math.round(
+            info.waitMs / 1000
+          )}s) — nguyên nhân: ${info.message}`
+        )
         opts.onStep?.({
           step,
           kind: 'text',
@@ -136,6 +142,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
             info.waitMs / 1000
           )}s)…`
         })
+      }
     )
 
     if (turn.text) {
