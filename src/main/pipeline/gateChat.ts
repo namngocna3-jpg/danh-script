@@ -24,7 +24,9 @@ import {
   assetCoverage,
   listScenes,
   listBlocks,
-  latestReviews
+  latestReviews,
+  getPlanArtifacts,
+  listAssetsFull
 } from '../db'
 
 /** Đặc tả 1 cổng hội thoại. */
@@ -170,6 +172,118 @@ export interface GateChatReply {
   reply: string
 }
 
+/** Mỗi cổng kế thừa artifact nào của các bước TRƯỚC (bơm THẲNG vào system, không chờ worker gọi read_plan). */
+const INHERIT_MAP: Record<string, InheritKey[]> = {
+  gate0_ideal: ['draft'],
+  gate1b_skeleton: ['brief', 'draft'],
+  gate1c_adaptation: ['brief', 'draft', 'skeleton'],
+  gate1d_script: ['brief', 'draft', 'skeleton', 'adaptation'],
+  gate_director: ['skeleton', 'adaptation'],
+  gate_assets: ['skeleton', 'adaptation', 'director', 'visual'],
+  gate_storyboard: ['skeleton', 'adaptation', 'director', 'assets'],
+  gate2_image: ['visual', 'assets'],
+  gate3_video: ['assets']
+}
+type InheritKey = 'brief' | 'draft' | 'skeleton' | 'adaptation' | 'director' | 'visual' | 'assets'
+
+/**
+ * Dựng "SỔ CÁI BƯỚC TRƯỚC" (tiếng Việt gọn) từ DB — chèn vào system prompt MỖI lượt.
+ * Đảm bảo worker LUÔN có dữ liệu kế thừa (nhất là CHUYỂN THỂ) dù không tự gọi read_plan.
+ * Đọc DB tươi mỗi lần → sửa bước trước rồi chạy lại bước sau ⇒ nhận data mới.
+ * Rỗng nếu cổng không có gì kế thừa (VD gate1a_draft — bước đầu).
+ */
+function buildInheritedLedger(projectId: number, gateStage: string): string {
+  const keys = INHERIT_MAP[gateStage]
+  if (!keys || keys.length === 0) return ''
+  const plan = getPlanArtifacts(projectId)
+  const out: string[] = []
+
+  for (const k of keys) {
+    if (k === 'brief' && plan.brief) {
+      const b = plan.brief
+      const parts = [
+        b.core_message && `Thông điệp lõi: ${b.core_message}`,
+        b.output_intent && `Ý đồ đầu ra: ${b.output_intent}`,
+        b.mood && `Mood: ${b.mood}`,
+        b.genre && `Thể loại: ${b.genre}`
+      ].filter(Boolean)
+      if (parts.length) out.push(`## Ý ĐỒ CHỐT\n${parts.join('\n')}`)
+    } else if (k === 'draft' && plan.draft) {
+      out.push(`## BẢN NHÁP\n${plan.draft}`)
+    } else if (k === 'skeleton' && plan.skeleton) {
+      const sk = plan.skeleton
+      out.push(
+        `## KHUNG XƯƠNG\nLogline: ${sk.logline}\n` +
+          `Nhịp: ${sk.beats.map((b) => `${b.order}.${b.role}: ${b.summary}`).join(' | ')}` +
+          (sk.emotional_arc ? `\nCảm xúc: ${sk.emotional_arc}` : '') +
+          (sk.payoff ? `\nTrả bài: ${sk.payoff}` : '')
+      )
+    } else if (k === 'adaptation' && plan.adaptation) {
+      const ad = plan.adaptation
+      out.push(
+        `## CHIẾN LƯỢC CHUYỂN THỂ\nHướng: ${ad.approach}` +
+          (ad.tone ? ` · tông ${ad.tone}` : '') +
+          (ad.show_dont_tell?.length
+            ? `\nCho xem đừng kể:\n${ad.show_dont_tell.map((s) => `• ${s}`).join('\n')}`
+            : '') +
+          (ad.visual_motifs?.length ? `\nMotif hình: ${ad.visual_motifs.join(' · ')}` : '') +
+          (ad.pitfalls?.length ? `\nCạm bẫy né: ${ad.pitfalls.join(' · ')}` : '')
+      )
+    } else if (k === 'director' && plan.director?.scenes.length) {
+      out.push(
+        `## QUY HOẠCH ĐẠO DIỄN\n` +
+          plan.director.scenes
+            .slice()
+            .sort((a, b) => a.order - b.order)
+            .map(
+              (d) =>
+                `Cảnh ${d.order}: ${d.line_count} thoại/${d.char_count} chữ · ${d.emotion} ${d.emotion_intensity}/10` +
+                (d.transition ? ` · chuyển: ${d.transition}` : '')
+            )
+            .join('\n')
+      )
+    } else if (k === 'visual' && plan.visualSystem) {
+      const vs = plan.visualSystem
+      if (vs.color_script.length || vs.lighting || vs.texture) {
+        out.push(
+          `## HỆ THỊ GIÁC\n` +
+            (vs.color_script.length
+              ? `Color Script: ${vs.color_script
+                  .slice()
+                  .sort((a, b) => a.scene_order - b.scene_order)
+                  .map((c) => `C${c.scene_order}:${c.palette}`)
+                  .join(' | ')}\n`
+              : '') +
+            (vs.lighting ? `Ánh sáng: ${vs.lighting}\n` : '') +
+            (vs.texture ? `Chất liệu: ${vs.texture}` : '')
+        )
+      }
+    } else if (k === 'assets') {
+      const assets = listAssetsFull(projectId)
+      if (assets.length) {
+        out.push(
+          `## NGUYÊN LIỆU (@tag CÓ THẬT — chỉ nhúng tag trong danh sách này)\n` +
+            assets
+              .map((a) => {
+                const derivs = a.derivatives.length
+                  ? ` [biến thể: ${a.derivatives.map((d) => `@${d.tag}`).join(', ')}]`
+                  : ''
+                return `@${a.tag} (${a.role}): ${a.name}${derivs}`
+              })
+              .join('\n')
+        )
+      }
+    }
+  }
+
+  if (!out.length) return ''
+  return (
+    'SỔ CÁI CÁC BƯỚC TRƯỚC (đã chốt — BÁM SÁT, không đổi hướng; ' +
+    'đây là ngữ cảnh kế thừa, bạn KHÔNG cần gọi lại read tool để lấy phần này):\n\n' +
+    out.join('\n\n')
+  )
+}
+
 /** Danh sách gate_stage hợp lệ cho hội thoại. */
 export function isChatGate(gateStage: string): boolean {
   return gateStage in CHAT_GATES
@@ -217,6 +331,11 @@ export async function runGateChat(
   if (gateStage === 'gate1d_script') craft = craft.filter((c) => c.axis !== 'story')
   const craftBlock = availableSkillsPrompt(craft)
 
+  // ⭐ SỔ CÁI KẾ THỪA — bơm THẲNG data bước trước (gồm CHUYỂN THỂ) vào system.
+  //    Không chờ worker tự gọi read_plan (nó hay bỏ qua) → liên kết bước ĐẢM BẢO,
+  //    không phụ thuộc may rủi. Đọc DB tươi mỗi lượt ⇒ chạy lại bước trước thì bước sau nhận data mới.
+  const inheritedLedger = buildInheritedLedger(projectId, gateStage)
+
   // Lớp giao thức hội thoại luôn nằm cuối để "đè" cách hành xử.
   const chatProtocol = readSkillOptional('free/_chat_protocol.md')
   const system = injectOutputIntent(
@@ -225,6 +344,7 @@ export async function runGateChat(
         loadExecutionSkill(project.pipeline, spec.worker),
         ...layerParts,
         craftBlock,
+        inheritedLedger,
         chatProtocol
       ),
       project.style_id
