@@ -44,15 +44,12 @@ export function GateChatPanel({
   const anyBusy = chatBusy !== null || reviewing !== null
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // Mở cổng: nạp lịch sử; nếu rỗng → tự gửi kickoff để trợ lý chào + hỏi/dựng.
+  // Mở cổng: CHỈ nạp lịch sử (+ plan để hiện output). KHÔNG tự chạy kickoff — chờ
+  // người dùng bấm "▶ Bắt đầu" mới gọi trợ lý (tránh mỗi lần bấm tab là chạy tốn lượt).
   useEffect(() => {
     void (async () => {
       await loadChat(projectId, stage)
       if (stageHasPlan(stage)) void loadPlan(projectId)
-      const cur = useWizard.getState().chats[stage]
-      if ((!cur || cur.length === 0) && useWizard.getState().chatBusy === null) {
-        void sendChat(projectId, stage, null)
-      }
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, stage])
@@ -81,8 +78,18 @@ export function GateChatPanel({
       {/* Khung hội thoại */}
       <div className="card flex max-h-[26rem] min-h-[16rem] flex-col gap-3 overflow-y-auto p-4">
         {turns.length === 0 && !busy && (
-          <div className="py-8 text-center text-xs text-slate-600">
-            Trợ lý đang chuẩn bị…
+          <div className="flex flex-col items-center gap-3 py-8 text-center">
+            <p className="max-w-sm text-xs text-slate-500">
+              Bấm để trợ lý bắt đầu bước này. Sau đó bạn chat để chỉnh, rồi bấm “Chốt &amp; sang cổng
+              sau”.
+            </p>
+            <button
+              className="btn-primary text-xs disabled:opacity-50"
+              disabled={anyBusy}
+              onClick={() => void sendChat(projectId, stage, null)}
+            >
+              ▶ Bắt đầu
+            </button>
           </div>
         )}
         {turns.map((t, i) => (
