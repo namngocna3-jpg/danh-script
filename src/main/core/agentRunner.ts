@@ -119,13 +119,23 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
     // ⭐ Làm sạch + đánh id MỚI cho tool_use/tool_result trước khi gửi (chống 400
     //    "tool_use ids" của 9router + loại khối mồ côi từ history cũ).
     const sanitized = sanitizeToolHistory(messages)
-    const turn = await llmQueue.enqueue(() =>
-      chatToolTurn(
-        sanitized,
-        toolSchemas,
-        { system: opts.system, temperature: opts.temperature, maxTokens: 4096 },
-        cfg
-      )
+    const turn = await llmQueue.enqueue(
+      () =>
+        chatToolTurn(
+          sanitized,
+          toolSchemas,
+          { system: opts.system, temperature: opts.temperature, maxTokens: 4096 },
+          cfg
+        ),
+      // Nhà cung cấp treo/chậm → hàng đợi tự thử lại: báo UI để không đứng câm ở "0 bước".
+      (info) =>
+        opts.onStep?.({
+          step,
+          kind: 'text',
+          detail: `⏳ Nhà cung cấp phản hồi chậm — đang thử lại (lần ${info.attempt}/${info.maxRetries}, chờ ${Math.round(
+            info.waitMs / 1000
+          )}s)…`
+        })
     )
 
     if (turn.text) {
@@ -160,7 +170,17 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
         output = await def.handler(use.input, opts.ctx)
       } catch (e) {
         isError = true
-        output = { error: e instanceof Error ? e.message : String(e) }
+        const msg = e instanceof Error ? e.message : String(e)
+        // Bắt đúng thủ phạm FOREIGN KEY: in tool + input + dự án để lần sau lộ ngay
+        // statement gây lỗi (không tốn lượt LLM). Các lỗi khác vẫn trả bình thường.
+        if (/foreign key/i.test(msg)) {
+          console.error(
+            `[FK] Ràng buộc khóa ngoại khi chạy tool "${use.name}" (project=${opts.ctx.projectId}) — input: ${JSON.stringify(
+              use.input
+            ).slice(0, 400)}`
+          )
+        }
+        output = { error: msg }
       }
       toolCalls.push({ name: use.name, input: use.input, output })
       opts.onStep?.({

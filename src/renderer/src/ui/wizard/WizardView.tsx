@@ -109,11 +109,19 @@ export function WizardView({ project }: { project: Project }): JSX.Element {
           const active = s.key === step
           const done = stepConfirmed(s.key, project.stage)
           const unlocked = stepUnlocked(s.key, project.stage)
+          // Bước phụ trợ (Tự động/Chuẩn bị/Chọn đạo diễn): confirmStage=null → LUÔN mở,
+          // không tính vào khóa tuần tự. Nói rõ để không hiểu nhầm là "bỏ qua thứ tự".
+          const helper = s.confirmStage === null
+          const tip = !unlocked
+            ? 'Chốt các bước trước để mở khóa bước này'
+            : helper
+              ? 'Bước phụ trợ — luôn mở, không cần chốt tuần tự (chỉ các bước sinh nội dung mới khóa lần lượt)'
+              : undefined
           return (
             <button
               key={s.key}
               disabled={!unlocked}
-              title={unlocked ? undefined : 'Chốt các bước trước để mở khóa bước này'}
+              title={tip}
               onClick={() => unlocked && setStep(s.key)}
               className={
                 'flex items-center gap-2 rounded-lg border px-2.5 py-2 text-xs transition ' +

@@ -3,7 +3,7 @@
 // ============================================================
 import Database from 'better-sqlite3'
 import { app } from 'electron'
-import { readFileSync } from 'fs'
+import { readFileSync, copyFileSync } from 'fs'
 import { join } from 'path'
 import type {
   CreateProjectInput,
@@ -43,12 +43,14 @@ function lockNoteFor(tag: string, role: AssetRole): string {
 }
 
 let db: Database.Database | null = null
+let dbFilePath = '' // nhớ đường dẫn file DB để backup dùng lại
 
 /** Mở DB trong thư mục userData + nạp schema (idempotent). */
 export function initDb(): Database.Database {
   if (db) return db
 
   const dbPath = join(app.getPath('userData'), 'danh-script.db')
+  dbFilePath = dbPath
   db = new Database(dbPath)
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
@@ -541,6 +543,25 @@ export function updateProjectIdeal(id: number, idealJson: string): void {
  */
 export function forceProjectStage(id: number, stage: string): void {
   getDb().prepare('UPDATE projects SET stage = ? WHERE id = ?').run(stage, id)
+}
+
+/**
+ * Sao lưu file DB ra bản .bak trước một thao tác XÓA phá hủy (làm lại bước nặng).
+ * WAL: checkpoint dồn hết thay đổi vào file chính rồi copy đồng bộ → bản sao đủ mới.
+ * Trả đường dẫn bản sao (để log). Lỗi copy KHÔNG chặn thao tác chính (chỉ cảnh báo).
+ */
+export function backupDb(label: string): string | null {
+  try {
+    const d = getDb()
+    d.pragma('wal_checkpoint(TRUNCATE)') // dồn WAL vào file chính trước khi copy
+    const safe = label.replace(/[^a-z0-9_-]/gi, '')
+    const dest = `${dbFilePath}.${safe}.bak`
+    copyFileSync(dbFilePath, dest)
+    return dest
+  } catch (e) {
+    console.error('[backupDb] Không sao lưu được DB:', e instanceof Error ? e.message : e)
+    return null
+  }
 }
 
 /**

@@ -13,6 +13,7 @@ import {
   updateProjectIdeal,
   forceProjectStage,
   clearStageOutputs,
+  backupDb,
   setProjectDirector,
   updateProjectStage,
   getPlanArtifacts,
@@ -383,6 +384,12 @@ export function registerIpc(): void {
     'project:clearStage',
     async (_e, projectId: number, step: string, backStage: string) => {
       try {
+        // Bước nặng (script xóa toàn bộ cảnh/khối; assets xóa nguyên liệu) → sao lưu DB
+        // trước để KHÔNG bao giờ mất trắng: lỡ sinh lại kém vẫn khôi phục được từ .bak.
+        if (step === 'script' || step === 'assets') {
+          const bak = backupDb(`p${projectId}-redo-${step}`)
+          if (bak) console.log(`[clearStage] Đã sao lưu DB trước khi làm lại "${step}": ${bak}`)
+        }
         clearStageOutputs(projectId, step)
         forceProjectStage(projectId, backStage)
         return ok(getProject(projectId))

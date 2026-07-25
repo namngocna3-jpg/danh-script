@@ -27,11 +27,20 @@ function isTransient(err: unknown): boolean {
   )
 }
 
+/** Báo cho người gọi biết đang chờ thử lại (để UI hiện "nhà cung cấp chậm…"). */
+export interface RetryInfo {
+  attempt: number // lần thử lại thứ mấy (1,2,3,4)
+  maxRetries: number // tổng số lần thử lại
+  waitMs: number // sắp chờ bao lâu trước khi thử lại
+  message: string // lỗi tạm thời khiến phải thử lại
+}
+
 interface QueueItem<T> {
   task: () => Promise<T>
   resolve: (v: T) => void
   reject: (e: unknown) => void
   retriesLeft: number
+  onRetry?: (info: RetryInfo) => void
 }
 
 export class TaskQueue {
@@ -47,14 +56,19 @@ export class TaskQueue {
     this.maxRetries = opts.maxRetries ?? 4
   }
 
-  /** Đẩy 1 task vào hàng đợi. Trả promise kết quả. */
-  enqueue<T>(task: () => Promise<T>): Promise<T> {
+  /**
+   * Đẩy 1 task vào hàng đợi. Trả promise kết quả.
+   * onRetry (tùy chọn): gọi mỗi khi task lỗi tạm thời và SẮP thử lại — để UI hiện
+   * "nhà cung cấp phản hồi chậm, đang thử lại…" thay vì đứng câm.
+   */
+  enqueue<T>(task: () => Promise<T>, onRetry?: (info: RetryInfo) => void): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       this.queue.push({
         task: task as () => Promise<unknown>,
         resolve: resolve as (v: unknown) => void,
         reject,
-        retriesLeft: this.maxRetries
+        retriesLeft: this.maxRetries,
+        onRetry
       })
       void this.drain()
     })
@@ -82,7 +96,15 @@ export class TaskQueue {
           // Backoff lũy thừa + jitter: 1s, 2s, 4s, 8s (±25%) — chờ 9router hồi.
           const base = 1000 * 2 ** attempt
           const jitter = base * 0.25 * Math.random()
-          await sleep(base + jitter)
+          const waitMs = base + jitter
+          // Báo UI: đang chờ thử lại (attempt tính từ 1 cho người đọc: 1/4, 2/4…).
+          item.onRetry?.({
+            attempt: attempt + 1,
+            maxRetries: this.maxRetries,
+            waitMs,
+            message: String((err as Error)?.message ?? err)
+          })
+          await sleep(waitMs)
           this.queue.unshift(item)
         } else {
           item.reject(err)
