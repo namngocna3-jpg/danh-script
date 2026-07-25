@@ -134,6 +134,24 @@ export function loadStyleAnchor(styleId?: string | null): string {
 }
 
 /**
+ * ⭐ CHỈ lấy STYLE TOKEN (khối ``` ĐẦU TIÊN của anchor) để DÁN vào prompt cuối.
+ * Anchor .md chứa frontmatter/tiêu đề/negative/cảnh báo — KHÔNG được đổ hết vào prompt
+ * (engine chỉ cần token chất liệu). Khối đầu = "từ neo phong cách"; khối sau = negative → bỏ.
+ * Không tách được (anchor lạ) → fallback rỗng để renderer tự dùng STYLE của từng block.
+ */
+export function loadStyleToken(styleId?: string | null): string {
+  const raw = loadStyleAnchor(styleId)
+  const m = raw.match(/```[a-z]*\s*\n([\s\S]*?)```/i)
+  if (!m) return ''
+  return m[1]
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .join(' ')
+    .trim()
+}
+
+/**
  * Thay {{STYLE_ANCHOR}} trong system prompt bằng nội dung anchor của style dự án.
  * Gọi sau composeSystem, trước khi đưa vào agentRunner.
  */

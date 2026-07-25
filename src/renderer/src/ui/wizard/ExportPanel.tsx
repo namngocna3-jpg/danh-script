@@ -238,35 +238,74 @@ function PromptBox({
   )
 }
 
-/** Gộp các trường video prompt thành text copy được (Seedance đọc CONSTRAINTS, bỏ NEGATIVE). */
+/** Bỏ dấu chấm cuối 1 đoạn (để nối câu không bị "..") + trim. */
+function trimDot(s: string): string {
+  return s.trim().replace(/[.\s]+$/, '')
+}
+
+/** Hoa chữ cái đầu (bỏ qua khi bắt đầu bằng @tag hoặc số — VD "@Image1", "0–3s"). */
+function capFirst(s: string): string {
+  if (!s || !/^[a-z]/.test(s)) return s
+  return s[0].toUpperCase() + s.slice(1)
+}
+
+/** Khử cụm trùng lặp trong 1 chuỗi ngăn bằng dấu phẩy (giữ thứ tự, bỏ qua hoa/thường). */
+function dedupPhrases(s: string): string {
+  const seen = new Set<string>()
+  return s
+    .split(',')
+    .map((p) => p.trim())
+    .filter((p) => {
+      if (!p) return false
+      const key = p.toLowerCase()
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .join(', ')
+}
+
+/**
+ * ⭐ Gộp video prompt thành 1 ĐOẠN ENGLISH LIỀN MẠCH để dán thẳng vào Seedance/Coco.
+ * Chuẩn BytePlus/Toonflow: prompt cuối là văn xuôi Subject→Motion→Camera→Env→Lighting→Style,
+ * KHÔNG nhãn config (STYLE:/SCENE:/MOTION:), KHÔNG tiếng Việt lẫn trong prompt.
+ * Hướng dẫn thao tác (upload ảnh khung đầu, dán chữ ở CapCut) tách RIÊNG bằng dòng «...» phía trên,
+ * KHÔNG nằm trong đoạn prompt → copy vào engine không dính rác.
+ */
 function videoPromptToText(
   v: VideoPrompt,
   stylePrefix?: string | null,
   frameRef?: { scene: number; block: number }
 ): string {
-  const lines: string[] = []
-  if (stylePrefix?.trim()) {
-    lines.push(`STYLE PREFIX (dán verbatim vào đầu mọi prompt):\n${stylePrefix.trim()}\n---`)
-  }
-  // ⭐ IMAGE-TO-VIDEO: ảnh khung đầu của CHÍNH block này (đã render ở GATE 2) = @Image1.
-  // Nhắc người dùng upload ĐÚNG ảnh cảnh X.Y làm khung đầu — trước đây thiếu dòng này nên
-  // dễ upload nhầm ảnh / không biết prompt video dựa trên ảnh nào.
+  // (1) Đoạn prompt English liền mạch — các phần nối bằng '. ' thành văn xuôi.
+  const body = [v.scene, v.motion, v.constraints]
+    .map((p) => trimDot(p ?? ''))
+    .filter(Boolean)
+    .map(capFirst)
+    .join('. ')
+  const style = trimDot(v.style ?? '')
+  const styleTail = trimDot(stylePrefix ?? '') // token chất liệu chung, nối cuối
+  const audio = trimDot(v.audio ?? '')
+
+  const promptParts = [body]
+  if (audio) promptParts.push(`Audio: ${audio}`)
+  // STYLE gộp cuối (ngắn nhất): style riêng block + token chung, KHỬ cụm lặp (theo dấu phẩy).
+  const styleMerged = dedupPhrases([style, styleTail].filter(Boolean).join(', '))
+  if (styleMerged) promptParts.push(`Style: ${styleMerged}`)
+  const prompt = promptParts.join('. ') + '.'
+
+  // (2) Hướng dẫn thao tác — dòng «...» TÁCH khỏi prompt (không phải nội dung engine đọc).
+  const notes: string[] = []
   if (frameRef) {
-    lines.push(
-      `FIRST FRAME (BẮT BUỘC upload ẢNH đã render của Cảnh ${frameRef.scene}.${frameRef.block} làm @Image1):`
+    notes.push(
+      `« Khung đầu: upload ẢNH đã render của Cảnh ${frameRef.scene}.${frameRef.block} làm @Image1 »`
     )
   }
-  lines.push(
-    `STYLE: ${v.style}`,
-    `SCENE: ${v.scene}`,
-    `MOTION: ${v.motion}`,
-    `AUDIO: ${v.audio}`,
-    `CONSTRAINTS (Seedance đọc): ${v.constraints ?? ''}`
-  )
-  if (v.negative?.trim()) lines.push(`NEGATIVE (dự phòng, Seedance bỏ qua): ${v.negative}`)
-  if (v.text_overlay?.trim())
-    lines.push(`TEXT OVERLAY (dán ở CapCut, KHÔNG render trong clip): "${v.text_overlay}"`)
-  return lines.join('\n')
+  if (v.text_overlay?.trim()) {
+    notes.push(`« Chữ dán ở CapCut (KHÔNG render trong clip): "${v.text_overlay.trim()}" »`)
+  }
+
+  return notes.length ? `${notes.join('\n')}\n\n${prompt}` : prompt
 }
 
 /** Gộp cả bundle thành 1 file Markdown copy/xuất được. */
@@ -408,7 +447,7 @@ function bundleToMarkdown(bundle: ExportBundle): string {
     L.push('```')
     L.push(
       b.video_prompt
-        ? videoPromptToText(b.video_prompt, null, {
+        ? videoPromptToText(b.video_prompt, bundle.stylePrefix, {
             scene: b.scene_order,
             block: b.block_order
           })

@@ -12,7 +12,7 @@ import {
   composeSystem,
   injectStyleAnchor,
   injectOutputIntent,
-  loadStyleAnchor,
+  loadStyleToken,
   loadDirectorPersona
 } from '../core/skillLoader'
 import { toolsFor } from '../tools'
@@ -509,7 +509,8 @@ export function buildExport(projectId: number): ExportBundle {
   }
   updateProjectStage(projectId, 'gate4_export')
   const plan = getPlanArtifacts(projectId)
-  const stylePrefix = loadStyleAnchor(project.style_id).trim() || null
+  // ⭐ Chỉ lấy STYLE TOKEN (không dump cả file anchor: frontmatter/negative/cảnh báo) để dán vào prompt.
+  const stylePrefix = loadStyleToken(project.style_id).trim() || null
   return {
     projectName: project.name,
     styleId: project.style_id,

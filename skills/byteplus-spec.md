@@ -60,6 +60,25 @@ Giới hạn thực dụng: **≤ 250 từ/prompt** (dưới xa cap 3000 ký t�
 
 > Ảnh khung đầu (imgPrompter) dùng phần 1,3,4,5,6 (bỏ Motion). Video (vidPrompter) dùng đủ 6.
 
+### 2a · ⭐ ĐÍCH CUỐI = 1 ĐOẠN ENGLISH LIỀN MẠCH (không phải bảng nhãn)
+
+Các trường `scene`/`motion`/`constraints`/`style` là Ô NHẬP NỘI BỘ — app tự ghép chúng thành **1 đoạn văn xuôi tiếng Anh** khi xuất. Vì vậy nội dung mỗi ô phải là **câu tiếng Anh hoàn chỉnh, nối liền được**, KHÔNG phải mảnh rời kiểu tag.
+
+- ✅ Mỗi ô = câu/cụm English tự nhiên, tự đứng được, KHÔNG mở đầu bằng nhãn ("Motion:", "The subject...").
+- ❌ ĐỪNG lặp ý giữa các ô: `scene` đã khóa @tag thì `constraints` đừng khóa lại lần nữa; `style` có "sharp focus" thì `constraints` bỏ "sharp focus".
+- ❌ ĐỪNG viết tiếng Việt / nhãn / hướng dẫn thao tác (upload ảnh, dán CapCut) vào bất kỳ ô prompt nào — app tự in hướng dẫn RIÊNG.
+
+**Hình mẫu đoạn cuối app ghép ra (video có ảnh khung đầu):**
+```
+@Image1 as the first frame; the single bead of sweat at @CO's hairline detaches and slides
+steadily down over the temple to the cheekbone, catching the light. 0–3s the bead travels;
+3–6s it stops at the jawline as the camera does an extremely slow dolly-in on the eye, subject
+barely moving. Preserve @CO's face exactly, keep the mole and freckles, natural anatomy, one
+bead of sweat only. Audio: thin lonely mountain wind, close nasal breathing, a faint single drip.
+Style: photorealistic, cinematic lighting, shallow depth of field, natural skin texture.
+```
+→ Một mạch, không nhãn `STYLE:/SCENE:/MOTION:`, khóa mặt CHỈ 1 lần, `sharp focus` không lặp.
+
 ---
 
 ## 3 · ĐỘ ADVERB CƯỜNG ĐỘ CHUYỂN ĐỘNG (bắt buộc khi có motion)
@@ -136,13 +155,14 @@ App chọn **Cách B**: vừa dùng ảnh khung đầu (1.1), VỪA giữ @tag n
 ```
 @Image1 as the first frame; <CHỈ tả thay đổi/diễn biến — KHÔNG tả lại ngoại hình/bối cảnh/trang phục>
 ```
-**Công thức `constraints` (thêm câu khóa):**
+**Công thức `constraints` (CHỈ MỘT câu khóa danh tính — KHÔNG lặp):**
 ```
-preserve @LAN's face and outfit exactly, 100% matches the reference, stable consistent face, natural anatomy
+preserve @LAN's face and outfit exactly, natural anatomy
 ```
+- ⚠️ **CHỐNG LẶP:** viết DUY NHẤT 1 câu khóa danh tính. ĐỪNG cộng dồn nhiều biến thể cùng nghĩa ("stable consistent face" + "preserve @X face exactly" + "100% matches the reference" là **cùng 1 ý** → chọn 1). `preserve @X's face and outfit exactly` đã bao hàm "khớp reference + mặt ổn định".
 - Nhúng @tag ở `scene` cho nhân vật/sản phẩm ĐANG diễn (khóa danh tính), KHÔNG nhồi mọi @tag của dự án.
 - ❌ VẪN CẤM tả lại mặt/dáng/váy/phòng bằng lời — ảnh 1.1 + @tag lo. Chỉ tả ĐỘNG.
-- Block **tĩnh/động nhẹ** (chỉ quay đầu, gió thổi): @tag + câu khóa có thể GỌN 1 câu. Block **động mạnh/nhiều cut**: khóa đậm hơn (nhắc @tag ở mỗi shot).
+- Block **tĩnh/động nhẹ** (chỉ quay đầu, gió thổi): @tag + câu khóa GỌN 1 câu. Block **động mạnh/nhiều cut**: nhắc lại @tag ở mỗi shot (đó là nhắc VỊ TRÍ theo shot, KHÔNG phải lặp câu khóa mặt).
 
 ---
 

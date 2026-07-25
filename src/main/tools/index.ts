@@ -536,7 +536,7 @@ const writeVideoPrompt: ToolDef = {
   schema: {
     name: 'write_video_prompt',
     description:
-      '⭐ Ghi prompt VIDEO cho 1 block. QUAN TRỌNG (image-to-video): ảnh GATE 2 của block này = KHUNG ĐẦU đã có sẵn nhân vật/bối cảnh/trang phục — prompt video chỉ LÀM ĐỘNG nó, KHÔNG dựng lại cảnh từ đầu. STYLE = chất liệu (không thời đại). SCENE = CHỈ tả thay đổi/diễn biến so với khung đầu, KHÔNG tả lại ngoại hình/bối cảnh/trang phục đã đứng yên trong ảnh; nhúng @tag. MOTION mang tải chính (camera + chuyển động chủ thể). CONSTRAINTS = ràng buộc POSITIVE cho Seedance (sharp focus, five fingers, stable face...) — engine BytePlus đọc cái này thay negative. TEXT_OVERLAY = chữ CTA/giá tiếng Việt chính xác dán ở khâu dựng (trống nếu block không cần chữ). Target BytePlus.',
+      '⭐ Ghi prompt VIDEO cho 1 block. Mỗi trường là câu ENGLISH tự nhiên — app tự GHÉP thành 1 đoạn liền mạch, nên ĐỪNG viết nhãn/tiếng Việt/hướng dẫn thao tác vào ô nào, và ĐỪNG lặp ý giữa các ô. QUAN TRỌNG (image-to-video): ảnh GATE 2 của block này = KHUNG ĐẦU đã có sẵn nhân vật/bối cảnh/trang phục — prompt video chỉ LÀM ĐỘNG nó, KHÔNG dựng lại cảnh từ đầu. STYLE = chất liệu (không thời đại), NGẮN nhất. SCENE = mở "@Image1 as the first frame;" rồi CHỈ tả thay đổi/diễn biến; nhúng @tag. MOTION mang tải chính (camera + chuyển động chủ thể). CONSTRAINTS = ràng buộc POSITIVE, khóa danh tính CHỈ 1 câu (không lặp STYLE). TEXT_OVERLAY = chữ CTA/giá tiếng Việt dán ở khâu dựng (trống nếu không cần). Target BytePlus.',
     input_schema: {
       type: 'object',
       properties: {
@@ -557,7 +557,7 @@ const writeVideoPrompt: ToolDef = {
         constraints: {
           type: 'string',
           description:
-            'Ràng buộc POSITIVE cho Seedance (câu khẳng định thay cho negative): sharp focus, five fingers, natural anatomy, stable face, consistent outfit within the scene... ⭐ CÁCH B (khóa danh tính khi có ảnh khung đầu): THÊM câu "preserve @LAN face and outfit exactly, 100% matches the reference" + positive lock riêng block: nhắc lại danh tính @tag + vị trí + SỐ LƯỢNG vật/người (VD "exactly one bottle of @SERUM, label faces camera, @LAN stays on the left"). Block động mạnh/nhiều cut → khóa đậm hơn.'
+            'Ràng buộc POSITIVE cho Seedance (câu khẳng định thay negative), viết thành CÂU tự nhiên nối được. ⭐ CHỐNG LẶP: khóa danh tính CHỈ MỘT câu "preserve @LAN face and outfit exactly, natural anatomy" (đã bao hàm khớp reference + mặt ổn định — ĐỪNG thêm "stable consistent face"/"100% matches the reference" nữa). ĐỪNG lặp từ đã có trong STYLE (VD "sharp focus"). Có thể thêm 1 positive lock riêng block: số lượng/vị trí (VD "exactly one bottle of @SERUM, @LAN stays on the left").'
         },
         negative: { type: 'string' },
         text_overlay: {
