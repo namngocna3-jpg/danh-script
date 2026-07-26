@@ -31,6 +31,31 @@ extra fingers, deformed face, cluttered background, text, watermark, blurry, low
 | Táo bạo · sắc màu (bold) | màu khối bão hòa cao | màu bù tương phản | đèn màu gel, nền đơn sắc, tương phản mạnh |
 | Cổ điển · sang (timeless) | nâu camel | trắng kem · xanh navy | ánh sáng cửa sổ tạo khối, tông ấm cổ điển |
 
+---
+
+## Triết lý chất liệu (worker đọc để chắt lọc — KHÔNG chép nguyên vào prompt)
+
+> Editorial là "biến quần áo thành thái độ". Người mẫu, ánh sáng, pose đều phục vụ concept — mỗi khung là một bìa tạp chí, kiêu và có chủ kiến.
+
+1. **Pose là ngôn ngữ** — dáng có chủ đích, đường nét cơ thể tạo hình học; không đứng chụp thường.
+2. **Ánh sáng tạc khối** — directional light (Rembrandt/split/rim) làm nổi phom dáng & chất vải, đổ bóng có chủ ý.
+3. **Chất vải kể chuyện** — nhìn thấy sợi dệt, độ rủ, nếp gấp, độ bóng/nhám của chất liệu.
+4. **Tiết chế & sang** — bố cục sạch, ít màu, khoảng trống có chủ đích; da tút nhẹ nhưng giữ thật.
+
+## Cách tả CHỦ THỂ (người mẫu)
+- Nêu **pose & thần thái** cụ thể (kiêu hãnh, lạnh, quyền lực…) + đường nét cơ thể/tay/cằm.
+- Da mịn nhưng **giữ texture thật**; ánh mắt có chủ kiến, hướng máy hoặc lệch nghệ thuật.
+
+## Cách tả TRANG PHỤC & CHẤT VẢI
+- Tả **chất liệu** (lụa/da/tweed/voan) + cách nó bắt sáng và rủ trên cơ thể; đường may, phom dáng rõ.
+
+## Cách tả BỐI CẢNH
+- Nền **đơn sắc/gradient sạch** hoặc set tối giản có concept; bối cảnh không lấn người mẫu.
+
+## Gu ĐẠO DIỄN (nhịp kể — cho video/storyboard)
+- Chuyển động **chậm, kiêu**: máy trượt quanh dáng, hero pose giữ lâu, để vải bay/rủ theo chuyển động.
+- Cắt theo **nhịp mạnh** (như bắt theo beat), mỗi cú một pose/góc dứt khoát.
+
 **Cấm (thuộc style này):** không hoạt hình hóa, không CGI, không ảnh chụp đời thường ngẫu hứng, không da bệt nhựa mất chất vải.
 
 > ⚠️ Anchor này CHỈ nói chất liệu (ảnh thời trang biên tập người thật). Thời đại/trang phục/nơi chốn do lớp B (scene_context) quyết định — kể cả cổ trang hay tương lai vẫn quay bằng chất liệu editorial này. Bảng màu cảm xúc là gợi ý mềm.
