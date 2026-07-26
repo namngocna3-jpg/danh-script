@@ -31,6 +31,28 @@ noisy render, harsh shadows, cluttered background, deformed geometry, text, wate
 | Ấm · mỹ phẩm (beauty) | hồng nude | be kem · vàng champagne | ánh sáng khuếch tán mềm, bề mặt satin mờ |
 | Năng lượng · thể thao (energy) | cam/đỏ bão hòa | đen · bạc | ánh sáng gắt tương phản cao, bề mặt nhám thể thao |
 
+---
+
+## Triết lý chất liệu (worker đọc để chắt lọc — KHÔNG chép nguyên vào prompt)
+
+> Render sản phẩm là "vật liệu hoàn hảo dưới ánh sáng hoàn hảo". Không có người, không lộn xộn — chỉ sản phẩm, chất liệu chuẩn, phản chiếu đẹp và nền sạch để tôn nó lên.
+
+1. **Vật liệu PBR chính xác** — kính/kim loại/nhựa/chất lỏng phản chiếu và khúc xạ đúng vật lý.
+2. **HDRI studio mềm** — ánh sáng bao đều tạo highlight và phản chiếu sạch, bóng đổ mềm.
+3. **Nền tối giản** — gradient/đơn sắc để mắt tập trung; sản phẩm là duy nhất trong khung.
+4. **Chi tiết siêu nét** — cạnh sắc, texture bề mặt rõ, không nhiễu render.
+
+## Cách tả SẢN PHẨM (hero)
+- Nêu **chất liệu bề mặt** cụ thể (brushed metal, frosted glass, glossy plastic, liquid splash) + cách nó bắt sáng.
+- Highlight & phản chiếu **kiểm soát**, cạnh sắc, tỉ lệ/hình dáng chuẩn; nhãn/logo rõ không méo.
+
+## Cách tả BỐI CẢNH
+- Nền studio sạch (podium, gradient, mặt phản chiếu) hoặc set tối giản gợi công dụng; bóng mềm chân sản phẩm.
+
+## Gu ĐẠO DIỄN (nhịp kể — cho video/storyboard)
+- Chuyển động **mượt tuyệt đối**: turntable/orbit quanh sản phẩm, macro push-in vào chi tiết vật liệu.
+- Reveal bằng **ánh sáng quét** trên bề mặt; splash/hạt bay slow-motion nếu hợp; kết bằng beauty shot có chỗ cho logo (chữ do lớp export chèn).
+
 **Cấm (thuộc style này):** không người thật, không hoạt hình vẽ tay, không low-poly game, không nhiễu render, không nền bừa bộn.
 
 > ⚠️ Anchor này CHỈ nói chất liệu (CGI render sản phẩm sạch). Bối cảnh/nơi đặt sản phẩm do lớp B (scene_context) quyết định theo từng cảnh. Bảng màu cảm xúc là gợi ý mềm — chọn 1 concept phù hợp brief.
