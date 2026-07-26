@@ -20,6 +20,36 @@ extra fingers, deformed face, text, watermark, blurry
 
 **Bảng màu lõi (L1 cứng — neo thẩm mỹ):** xanh tươi #3B82F6, cam sức sống #F59E0B, trắng #FFFFFF, nâu #4A3728, xám #8A8A8A, tím nhạt #C084FC, hồng ấm #FB7185, vàng nhạt #FDE047, bạc hà #5EEAD4.
 
+---
+
+## Triết lý chất liệu (worker đọc để chắt lọc — KHÔNG chép nguyên vào prompt)
+
+> Flat design là "ít nhưng rõ". Khối màu thuần, hình học tối giản, không bóng không gradient — mọi thứ sạch, hiện đại, dễ hiểu tức thì. Kiểu minh họa branding/explainer công nghệ.
+
+1. **Khối màu thuần** — solid fill, không đổ bóng, không gradient; ranh giới sạch.
+2. **Hình học tối giản** — nhân vật/vật thể quy về hình khối cơ bản, đường nét gọn.
+3. **Bảng màu tươi có hệ thống** — vài màu chủ đạo phối chủ đích, tương phản rõ.
+4. **Khoảng trống có chủ ý** — bố cục thoáng, cân đối, dẫn mắt đến ý chính.
+
+## Cách tả CHỦ THỂ
+- Nhân vật hình học phẳng: khối đơn giản, màu thuần, biểu cảm tối giản mà rõ; không chi tiết thừa.
+
+## Cách tả BỐI CẢNH
+- Nền phẳng khối màu, hình học tối giản gợi bối cảnh; nhiều khoảng trống sạch.
+
+## Gu MÀU & BỐ CỤC (bảng dẫn hướng)
+
+| Mục đích | Phối màu & bố cục | Cảm giác |
+|---|---|---|
+| Branding công nghệ | xanh dương + trắng, khối gọn | tin cậy, hiện đại |
+| Explainer vui | cam-vàng-xanh tươi, icon thân thiện | dễ gần, rõ ràng |
+| Tối giản sang | 2 màu + nhiều trắng | tinh tế, cao cấp |
+| Năng động trẻ | màu bật tương phản, hình học động | trẻ trung, vui |
+
+## Gu ĐẠO DIỄN (nhịp kể — motion graphics)
+- Chuyển động **hình học mượt**: khối trượt/xoay/morph gọn gàng, transition sạch.
+- Nhấn **1 ý mỗi khung**, không nhồi; nhịp rõ ràng như motion graphic thương hiệu.
+
 **Cấm (thuộc style này):** không photoreal, không 3D, không đổ bóng nặng/gradient.
 
 > ⚠️ Anchor này CHỈ nói chất liệu (minh họa phẳng). Thời đại/trang phục/nơi chốn do lớp B (scene_context) quyết định theo từng cảnh.
