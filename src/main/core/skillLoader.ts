@@ -21,6 +21,7 @@ import {
 import { createHash } from 'crypto'
 import { join, dirname, relative } from 'path'
 import { getProject } from '../db'
+import { imageModel, videoModel } from '../../shared/models'
 
 /** Thư mục skills SỬA ĐƯỢC (trong userData). Ưu tiên số 1 khi đọc. */
 function userSkillsDir(): string {
@@ -211,6 +212,37 @@ export function loadStyleAnchor(styleId?: string | null): string {
     if (s) return s
   }
   return readSkillOptional('styles/realpeople_cinematic/anchor.md')
+}
+
+/**
+ * ⭐ NẠP HỒ SƠ MODEL — luật viết prompt của ĐÚNG đời engine dự án đang nhắm.
+ *
+ * VÌ SAO CẦN: mỗi đời model đọc prompt khác nhau (Seedream 5.0 xếp lớp & format đứng đầu,
+ * 4.0 bám công thức 6 phần; Seedance 2.5 nhận 50 tham chiếu, 2.0 chỉ 12, 1.5 chỉ 1 ảnh khung
+ * đầu). Trước đây app hard-code một bộ luật cho tất cả → prompt sinh ra đúng với đời này thì
+ * sai với đời kia mà không ai biết.
+ *
+ * Khối trả về được nối SAU các lớp chung để nó ĐÈ LÊN (thứ tự trong composeSystem = độ ưu tiên).
+ * Thiếu file .md → trả '' (bỏ qua an toàn, thợ vẫn chạy bằng luật chung).
+ *
+ * `gate` quyết định đọc hồ sơ ảnh hay video — thợ ảnh không cần biết luật Seedance và ngược lại;
+ * nạp cả hai chỉ tổ tốn context và làm thợ lẫn luật của engine khác.
+ */
+export function loadModelProfile(
+  paramsJson: string | null | undefined,
+  kind: 'image' | 'video'
+): string {
+  let id: string | null = null
+  try {
+    if (paramsJson) {
+      const p = JSON.parse(paramsJson) as { image_model?: string; video_model?: string }
+      id = (kind === 'image' ? p.image_model : p.video_model) ?? null
+    }
+  } catch {
+    /* params_json hỏng → rơi về mặc định bên dưới */
+  }
+  const info = kind === 'image' ? imageModel(id) : videoModel(id)
+  return readSkillOptional(info.skill)
 }
 
 /**

@@ -107,6 +107,20 @@ export interface AdaptationStrategy {
   pitfalls?: string[] // cạm bẫy cần né khi viết lời thoại/dựng cảnh
 }
 
+/**
+ * ⭐ MODEL RENDER — chọn ở GATE THAM SỐ, quyết định LUẬT VIẾT PROMPT.
+ *
+ * VÌ SAO PHẢI CHỌN, không hard-code: mỗi đời model đọc prompt KHÁC NHAU.
+ * Seedream 5.0 xếp lớp `format → subject → composition → lighting → text → style` và
+ * chịu prompt dài; 4.0 thì bám công thức 6 phần và ngắn. Seedance 2.5 nhận tới 50 tham
+ * chiếu + 30s; 2.0 thì ≤12 file + 15s. Viết prompt 2.5 rồi dán vào 2.0 = engine bỏ qua
+ * nửa chỉ thị. App ghép hồ sơ model tương ứng vào system prompt của thợ (mục MODEL_PROFILE).
+ *
+ * `skills/models/<id>.md` là nơi ghi luật từng model — thêm model = thêm file, KHÔNG sửa code.
+ */
+export type ImageModelId = 'seedream-5' | 'seedream-4'
+export type VideoModelId = 'seedance-2.0' | 'seedance-2.5' | 'seedance-1.5'
+
 /** Tham số kỹ thuật chốt ở GATE THAM SỐ. */
 export interface ProjectParams {
   duration_sec: number
@@ -114,6 +128,10 @@ export interface ProjectParams {
   language: string // ngôn ngữ narration/voice (mặc định 'vi')
   style_id: string // ⭐ STYLE = chất liệu render, khóa L1 toàn dự án
   genre?: string // TÙY CHỌN: slug thể loại (skills/genres/<genre>.md) gợi ý nhịp kể — KHÔNG ép khuôn, bỏ trống = free
+  // ⭐ Model render — TÙY CHỌN để dự án cũ (params_json không có 2 trường này) vẫn đọc được.
+  // Thiếu → dùng mặc định ở shared/models.ts, KHÔNG crash.
+  image_model?: ImageModelId // engine ảnh khung đầu (GATE 2)
+  video_model?: VideoModelId // engine video (GATE 3)
 }
 
 /** ⭐ BỐI CẢNH riêng TỪNG cảnh (lớp B, mềm) — do ideal đẻ ra bottom-up. */
@@ -433,6 +451,13 @@ export interface ReviewResult {
 export interface ExportBlock {
   scene_order: number
   block_order: number
+  /**
+   * ⭐ Mô tả shot (góc máy/hành động/nội dung khung) do storyboardWright quy hoạch ở GATE 1.
+   * Cần cột này để biết block đang tả CÁI GÌ mà không phải đọc prompt tiếng Anh.
+   */
+  shot_desc: string
+  /** ⭐ Số giây của block — lấy từ `shot_panel_json.duration_sec`, để canh dựng ở CapCut. */
+  duration_sec: number | null
   narration_vi: string
   image_prompt_en: string
   video_prompt: VideoPrompt | null

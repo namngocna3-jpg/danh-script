@@ -3,14 +3,15 @@
 // Mỗi cổng = linh hồn thợ + lớp skill + lớp _chat_protocol + history hội thoại.
 // Agent HỎI khi thiếu, SỬA đúng chỗ khi được yêu cầu; không tự "qua cổng".
 // ============================================================
-import { runAgent, type AgentStep } from '../core/agentRunner'
+import { runAgent, AgentRunError, type AgentStep } from '../core/agentRunner'
 import {
   loadExecutionSkill,
   readSkillOptional,
   composeSystem,
   injectStyleAnchor,
   injectOutputIntent,
-  loadDirectorPersona
+  loadDirectorPersona,
+  loadModelProfile
 } from '../core/skillLoader'
 import { toolsFor } from '../tools'
 import { workerSpec } from './workerSpecs'
@@ -171,7 +172,7 @@ const CHAT_GATES: Record<string, ChatGateSpec> = {
     kickoff:
       'Người dùng vừa mở cổng PROMPT ẢNH. BƯỚC 0 (đọc-trước-khi-làm): đọc read_ideal + read_plan (hệ thị giác/Color Script) + read_scenes + read_blocks (KHỐI PHÂN CẢNH shot_panel: cỡ cảnh/góc/camera/Start→End/@tag đã dựng ở bước Phân cảnh) + read_assets (@tag đã có). ' +
       'CẤM bịa asset/@tag không có trong sổ — chỉ nhúng @tag đã tồn tại; thiếu tiền đề thì báo. Sau đó chào ngắn, ' +
-      'rồi dựng prompt ảnh khung đầu (tiếng Anh, 3 đoạn, nhúng @tag) cho MỖI block đã có shot_desc. ' +
+      'rồi dựng prompt ảnh khung đầu (tiếng Anh, 6 phần SUBJECT/CAMERA/ENVIRONMENT/LIGHTING/STYLE — anchor do app chèn, nhúng @tag) cho MỖI block đã có shot_desc. ' +
       'Bám KHỐI PHÂN CẢNH (shot_panel) của mỗi block — KHÔNG bịa lại cỡ cảnh/góc/hành động. ' +
       '⚠️ GHI THEO ĐỢT (BẮT BUỘC, chống cắt token): mỗi lượt gọi write_image_prompt cho TỐI ĐA 3 block — đừng dồn tất cả block vào 1 lượt (JSON dài quá 16k token sẽ bị cắt, mất trắng). ' +
       'Ghi xong 3 block thì lượt tiếp theo tự viết 3 block kế (KHÔNG chờ người dùng gõ "tiếp", KHÔNG dừng hỏi) — cứ thế tới khi MỌI block có prompt. ' +
@@ -188,7 +189,7 @@ const CHAT_GATES: Record<string, ChatGateSpec> = {
       'LUẬT VÀNG image-to-video: mỗi block ĐÃ CÓ ảnh khung đầu (nhân vật/bối cảnh/trang phục/đạo cụ đã đứng yên trong ảnh) → prompt video CHỈ LÀM ĐỘNG ảnh đó, CẤM tả lại ngoại hình/bối cảnh/trang phục. SCENE ngắn (chỉ thay đổi/diễn biến), MOTION mang tải chính. ' +
       'CÁCH B — KHUNG ĐẦU BẮT BUỘC: ảnh khung đầu của block chính là ẢNH GATE 2 ĐÃ RENDER của ĐÚNG block đó (KHÔNG phải ảnh nguyên liệu @tag rời). SCENE PHẢI mở đầu bằng đúng cụm "@Image1 as the first frame;" rồi mới tả thay đổi/diễn biến. @tag chỉ dùng để KHÓA danh tính (giữ mặt/trang phục), KHÔNG phải nguồn khung đầu. ' +
       'MOTION bám action_start→action_end trong shot_panel; camera bám camera_move/shot_size đã chốt. ' +
-      'MULTI-SHOT (mọi thể loại): block được 1–3 shot (CUT-by-CUT) cắt bằng "Cut to"/"Lens switch to", mỗi shot khóa lại @tag để không drift; MOTION tả tư thế START→END + chi tiết vật lý (cấm động từ mơ hồ); CONSTRAINTS thêm câu "preserve @tag face and outfit exactly, 100% matches the reference" + 1 positive lock riêng block (danh tính @tag + vị trí + số lượng). ' +
+      'MULTI-SHOT (mọi thể loại): block được 1–3 shot (CUT-by-CUT) cắt bằng "Cut to"/"Lens switch to", mỗi shot khóa lại @tag để không drift; MOTION tả tư thế START→END + chi tiết vật lý (cấm động từ mơ hồ); CONSTRAINTS thêm ĐÚNG MỘT câu khóa "preserve @tag face and outfit exactly" gộp luôn positive lock riêng block (vị trí + số lượng) — ĐỪNG cộng dồn "stable face"/"100% matches the reference" nữa, ba biến thể cùng nghĩa làm loãng câu khóa. ' +
       'Chào ngắn rồi dựng prompt video (STYLE/SCENE/MOTION/AUDIO/CONSTRAINTS + TEXT_OVERLAY nếu cần) cho MỖI block. ' +
       '⚠️ GHI THEO ĐỢT (BẮT BUỘC, chống cắt token): mỗi lượt gọi write_video_prompt cho TỐI ĐA 3 block — đừng bao giờ dồn tất cả block vào 1 lượt (JSON dài quá 16k token sẽ bị cắt, mất trắng). ' +
       'Ghi xong 3 block thì lượt tiếp THEO tự viết 3 block kế (KHÔNG chờ người dùng gõ "tiếp", KHÔNG dừng lại hỏi) — cứ thế cho tới khi MỌI block có prompt. ' +
@@ -290,6 +291,14 @@ function buildInheritedLedger(projectId: number, gateStage: string): string {
         const anchor = buildAnchorBlock(assets)
         const dynamicBlock = buildDynamicBlock(assets)
 
+        // ⭐ Asset ĐÃ có ảnh tư liệu → khối anchor của nó chỉ còn câu TRỎ VỀ ẢNH + nốt ruồi
+        //    + khí chất, KHÔNG còn tả ngũ quan (xem anchor.ts · ANCHOR_ORDER_REF).
+        //    PHẢI nói rõ vì sao ngắn: thợ thấy dòng anchor cụt lủn mà không hiểu lý do thì
+        //    nó "tốt bụng" bù mô tả mặt vào thân prompt — đúng thứ chế độ trỏ sinh ra để loại.
+        const refTags = assets
+          .filter((a) => a.ref_image_path && hasLock(a.identity_lock))
+          .map((a) => `@${a.tag}`)
+
         // ⚠️ Asset chưa khóa mặt: TRƯỚC ĐÂY im lặng — sổ cái vẫn tuyên bố "KHÓA CỨNG" trong khi
         // bên dưới trống rỗng, thợ buộc phải bịa ngoại hình mỗi block một kiểu. Giờ KÊU TO.
         const unlocked = assets
@@ -316,7 +325,13 @@ function buildInheritedLedger(projectId: number, gateStage: string): string {
                 `> Mỗi prompt ảnh PHẢI mở đầu bằng ĐÚNG khối dưới đây (chỉ giữ dòng của @tag block đó dùng), ` +
                 `rồi mới tới bối cảnh/hành động/phong cách. KHÔNG diễn giải, KHÔNG rút gọn, KHÔNG đổi từ — ` +
                 `sai một chữ là mặt trôi. Sau khối này CẤM tả lại mặt/ngũ quan/dáng bằng lời của bạn.\n\n` +
-                anchor
+                anchor +
+                (refTags.length
+                  ? `\n\n⭐ ${refTags.join(', ')} ĐÃ CÓ ẢNH TƯ LIỆU → dòng anchor CỐ Ý NGẮN: chỉ trỏ về ảnh ` +
+                    `+ dấu nhận diện + khí chất, KHÔNG tả ngũ quan. Vì người dùng đính ảnh thật vào ` +
+                    `engine, nên tả mặt bằng chữ nữa là TẠO NGUỒN THỨ HAI đánh nhau với ảnh → model vẽ ` +
+                    `ra mặt THỨ BA. ĐỪNG "bù" thêm mô tả mặt vào thân prompt — ngắn ở đây là ĐÚNG.`
+                  : '')
               : '') +
             // ⭐ Hồ sơ ĐỘNG chỉ có nghĩa ở cổng video (ảnh tĩnh không có dáng đi/giọng nói).
             // Bơm ở cổng ảnh chỉ tổ làm thợ tưởng phải tả vào prompt → phình prompt, loãng tín hiệu.
@@ -446,7 +461,18 @@ export async function runGateChat(
   const inheritedLedger = buildInheritedLedger(projectId, gateStage)
 
   // Lớp giao thức hội thoại luôn nằm cuối để "đè" cách hành xử.
+  // ⭐ _tool_errors.md tách riêng vì đường 1-phát (gates.ts) cũng cần — xem comment ở đó.
+  const toolErrors = readSkillOptional('free/_tool_errors.md')
   const chatProtocol = readSkillOptional('free/_chat_protocol.md')
+  // ⭐ HỒ SƠ MODEL — luật viết prompt riêng của đời engine dự án nhắm. Xem loadModelProfile().
+  //    Đặt SAU các lớp chung (trước chatProtocol) để đè luật chung mà vẫn không lấn giao thức chat.
+  //    gate_assets cũng tính là cổng ẢNH: prompt character-sheet / establishing cũng chạy Seedream.
+  const modelProfile =
+    gateStage === 'gate2_image' || gateStage === 'gate_assets'
+      ? loadModelProfile(project.params_json, 'image')
+      : gateStage === 'gate3_video'
+        ? loadModelProfile(project.params_json, 'video')
+        : ''
   const system = injectOutputIntent(
     injectStyleAnchor(
       composeSystem(
@@ -454,6 +480,8 @@ export async function runGateChat(
         ...layerParts,
         craftBlock,
         inheritedLedger,
+        toolErrors,
+        modelProfile,
         chatProtocol
       ),
       project.style_id
@@ -467,16 +495,31 @@ export async function runGateChat(
   // Cấp thêm tool tự-rút craft cho MỌI cổng (chỉ khi có craft khả dụng để đỡ nhiễu).
   const toolNames = craft.length ? [...spec.tools, 'list_skills', 'read_skill_file'] : spec.tools
 
-  const result = await runAgent({
-    system,
-    userPrompt: userTurn,
-    tools: toolsFor(toolNames),
-    ctx: { projectId },
-    history,
-    maxSteps: 14,
-    temperature: 0.6,
-    onStep
-  })
+  // ⭐ maxSteps 14 → 22. Skill dặn ghi ≤3 block/lượt; phim 16 block cần ~6 lượt ghi +
+  //    các lượt đọc (read_ideal/read_assets/read_blocks) + soát cuối (coverage + drift).
+  //    Trần 14 hết sạch quanh block thứ 9 → thợ dừng giữa chừng mà người dùng không biết.
+  let result: Awaited<ReturnType<typeof runAgent>>
+  try {
+    result = await runAgent({
+      system,
+      userPrompt: userTurn,
+      tools: toolsFor(toolNames),
+      ctx: { projectId },
+      history,
+      maxSteps: 22,
+      temperature: 0.6,
+      onStep
+    })
+  } catch (e) {
+    // ⭐ Lỗi giữa chừng (mạng đứt, 400, chạm trần token) TỪNG LÀM MẤT TRẮNG cả cuộc hội
+    //    thoại vì lệnh lưu nằm sau `await`. Block đã ghi thì vẫn còn (mỗi tool commit
+    //    ngay), nhưng lịch sử chat mất thì lượt sau thợ không biết đã bàn gì → dựng lại
+    //    từ đầu. Giờ `runAgent` gói lịch sử dở vào lỗi để lưu trước khi ném tiếp.
+    if (e instanceof AgentRunError && e.partialMessages.length) {
+      saveGateChat(projectId, gateStage, e.partialMessages)
+    }
+    throw e
+  }
 
   saveGateChat(projectId, gateStage, result.messages)
   return { reply: result.finalText }

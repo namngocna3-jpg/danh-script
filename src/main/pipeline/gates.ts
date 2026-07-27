@@ -13,7 +13,8 @@ import {
   injectStyleAnchor,
   injectOutputIntent,
   loadStyleToken,
-  loadDirectorPersona
+  loadDirectorPersona,
+  loadModelProfile
 } from '../core/skillLoader'
 import { toolsFor } from '../tools'
 import { workerSpec } from './workerSpecs'
@@ -43,7 +44,8 @@ import type {
   AssetFull,
   IdealBrief,
   ShotPanel,
-  DirectorBriefResult
+  DirectorBriefResult,
+  ExportBlock
 } from '../../shared/types'
 
 /** Định nghĩa 1 cổng chạy được bằng agent-thợ. */
@@ -117,7 +119,7 @@ const GATES: Record<string, GateSpec> = {
     buildPrompt: () =>
       `BƯỚC 0 BẮT BUỘC (đọc-trước-khi-làm): gọi read_ideal + read_plan + read_scenes + read_blocks + read_assets để nắm TOÀN VĂN ideal + hệ thị giác + bối cảnh + shot đã quy hoạch + @tag. ` +
       `CẤM bịa asset/@tag không có trong sổ — chỉ nhúng @tag đã tồn tại; thiếu tiền đề thì báo. ` +
-      `Rồi dựng prompt ẢNH khung đầu (tiếng Anh, 3 đoạn, nhúng @tag) cho mỗi block của mỗi cảnh. ` +
+      `Rồi dựng prompt ẢNH khung đầu (tiếng Anh, 6 phần SUBJECT/CAMERA/ENVIRONMENT/LIGHTING/STYLE — khối [IDENTITY LOCK] do app tự chèn, nhúng @tag) cho mỗi block của mỗi cảnh. ` +
       `Mỗi cảnh tối thiểu 1 block (block_order bắt đầu 1). Cuối cùng read_coverage để chắc không block nào thiếu ảnh.`
   },
   vidPrompter: {
@@ -130,7 +132,7 @@ const GATES: Record<string, GateSpec> = {
       `CẤM bịa asset/cảnh/block không có trong sổ; thiếu tiền đề thì báo, không tự chế. ` +
       `LUẬT VÀNG image-to-video: mỗi block ĐÃ CÓ ảnh khung đầu ở GATE 2 (nhân vật/bối cảnh/trang phục/đạo cụ đã đứng yên trong ảnh). Prompt video chỉ LÀM ĐỘNG ảnh đó — CẤM tả lại ngoại hình/bối cảnh/trang phục. ` +
       `SCENE ngắn (chỉ thay đổi/diễn biến), MOTION mang tải chính (camera + chuyển động chủ thể). ` +
-      `MULTI-SHOT (mọi thể loại): block được 1–3 shot (CUT-by-CUT) — >1 shot cắt bằng "Cut to"/"Lens switch to", mỗi shot khóa lại @tag để không drift danh tính. MOTION tả tư thế START→END + 1 chi tiết vật lý (cấm động từ mơ hồ). CONSTRAINTS thêm 1 positive lock riêng block (danh tính @tag + vị trí + số lượng). ` +
+      `MULTI-SHOT (mọi thể loại): block được 1–3 shot (CUT-by-CUT) — >1 shot cắt bằng "Cut to"/"Lens switch to", mỗi shot khóa lại @tag để không drift danh tính. MOTION tả tư thế START→END + 1 chi tiết vật lý (cấm động từ mơ hồ). CONSTRAINTS thêm ĐÚNG MỘT câu khóa "preserve @tag face and outfit exactly" gộp luôn vị trí + số lượng (đừng cộng dồn "stable face"/"100% matches the reference" — cùng nghĩa, làm loãng). ` +
       `Dựng prompt VIDEO (STYLE/SCENE/MOTION/AUDIO/CONSTRAINTS + NEGATIVE dự phòng + TEXT_OVERLAY nếu cần chữ, target BytePlus/Seedance) cho mỗi block đã có prompt ảnh. ` +
       `Nhúng @tag ở trường scene + truyền mảng tags. Cuối cùng read_coverage để chắc không block nào thiếu video.`
   }
@@ -180,10 +182,24 @@ export async function runGate(
   // Gu đạo diễn (ưu tiên Director Bible, fallback persona) — nối vào ĐẦU system như đường chat,
   // để đường 1-phát KHÔNG bỏ sót kim chỉ nam thẩm mỹ.
   const directorBlock = directorSystemBlock(projectId)
+  // ⭐ Giao thức xử lý lỗi tool — TRƯỚC ĐÂY CHỈ ĐƯỜNG CHAT CÓ. Đường 1-phát chạy tới 24 lượt
+  //    mà không có chỉ dẫn nào khi tool trả `error` → thợ gọi lại y hệt tới cháy trần bước.
+  const toolErrors = readSkillOptional('free/_tool_errors.md')
+  // ⭐ HỒ SƠ MODEL — luật viết prompt của ĐÚNG đời engine dự án nhắm (Seedream 5.0/4.0,
+  //    Seedance 2.0/2.5/1.5). Đứng CUỐI composeSystem để ĐÈ luật chung khi hai bên chỏi nhau.
+  //    Chỉ 2 cổng prompt cần: cổng ảnh đọc hồ sơ ảnh, cổng video đọc hồ sơ video.
+  const modelProfile =
+    gateKey === 'imgPrompter'
+      ? loadModelProfile(project.params_json, 'image')
+      : gateKey === 'vidPrompter'
+        ? loadModelProfile(project.params_json, 'video')
+        : ''
   const baseSystem = composeSystem(
     loadExecutionSkill(project.pipeline, spec.worker),
     ...layerParts,
-    craftBlock
+    craftBlock,
+    toolErrors,
+    modelProfile
   )
   const system = injectOutputIntent(
     injectStyleAnchor(
@@ -467,14 +483,10 @@ export async function reviewGate(projectId: number, gateStage: string): Promise<
 
 // ---------------- GATE 4: Xuất (không cần LLM) ----------------
 
-export interface ExportBlock {
-  scene_order: number
-  block_order: number
-  narration_vi: string
-  image_prompt_en: string
-  video_prompt: VideoPrompt | null
-  asset_ids: number[] // ⭐ id nguyên liệu/biến thể block này dùng (bảng nối block_assets)
-}
+// ⭐ ExportBlock dùng CHUNG bản trong `shared/types.ts` — trước đây file này khai lại một
+//    bản y hệt, nên thêm cột ở đây mà renderer đọc bản kia thì không thấy gì (đúng ca
+//    "output thiếu cột mô tả block + số giây"). Một nguồn sự thật duy nhất.
+export type { ExportBlock }
 
 export interface ExportBundle {
   projectName: string
@@ -497,9 +509,22 @@ export function buildExport(projectId: number): ExportBundle {
   const blocks: ExportBlock[] = []
   for (const s of listScenes(projectId)) {
     for (const b of listBlocks(s.id) as Block[]) {
+      // Số giây nằm trong shot_panel_json (GATE 1 ghi). JSON hỏng → để null, KHÔNG ném lỗi
+      // làm sập cả bản xuất chỉ vì 1 block.
+      let durationSec: number | null = null
+      if (b.shot_panel_json) {
+        try {
+          const panel = JSON.parse(b.shot_panel_json) as Partial<ShotPanel>
+          if (typeof panel.duration_sec === 'number') durationSec = panel.duration_sec
+        } catch {
+          /* panel hỏng → coi như chưa có số giây */
+        }
+      }
       blocks.push({
         scene_order: s.order_idx,
         block_order: b.order_idx,
+        shot_desc: b.shot_desc ?? '',
+        duration_sec: durationSec,
         narration_vi: s.narration_vi ?? '',
         image_prompt_en: b.image_prompt_en ?? '',
         video_prompt: b.video_prompt_json ? (JSON.parse(b.video_prompt_json) as VideoPrompt) : null,
