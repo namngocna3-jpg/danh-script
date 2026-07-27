@@ -142,3 +142,40 @@ export function stepFromStage(stage: string): StepKey {
   )
   return (def?.key ?? 'script') as StepKey
 }
+
+// ============================================================
+// ⭐ BẢN ĐỒ KẾ THỪA — NGUỒN DUY NHẤT
+// Mỗi cổng chat kế thừa artifact nào của các bước TRƯỚC nó (theo thứ tự hiển thị).
+// Trước đây bảng này bị CHÉP TAY 2 chỗ: INHERIT_MAP (main/pipeline/gateChat.ts, dùng để
+// dựng sổ cái nhét vào system prompt) và INHERIT_KEYS (renderer/InheritedDataView.tsx,
+// dùng để vẽ panel "📥 Kế thừa từ bước trước") — sửa 1 nơi quên nơi kia thì UI hiện
+// KHÁC với thứ thợ thật sự nhận. Giờ cả hai import từ đây.
+// ============================================================
+
+/** Tên các artifact có thể kế thừa giữa các cổng. */
+export type InheritKey =
+  | 'brief'
+  | 'draft'
+  | 'skeleton'
+  | 'adaptation'
+  | 'director'
+  | 'visual'
+  | 'assets'
+  | 'script'
+
+export const INHERIT_MAP: Record<string, InheritKey[]> = {
+  gate0_ideal: ['draft'],
+  gate1b_skeleton: ['brief', 'draft'],
+  gate1c_adaptation: ['brief', 'draft', 'skeleton'],
+  gate1d_script: ['brief', 'draft', 'skeleton', 'adaptation'],
+  gate_director: ['skeleton', 'adaptation', 'script'],
+  gate_assets: ['skeleton', 'adaptation', 'director', 'visual', 'script'],
+  gate_storyboard: ['skeleton', 'adaptation', 'director', 'assets', 'script'],
+  gate2_image: ['visual', 'assets'],
+  gate3_video: ['assets']
+}
+
+/** Artifact 1 cổng kế thừa ([] nếu cổng đó là bước đầu / không kế thừa gì). */
+export function inheritKeysFor(gateStage: string): InheritKey[] {
+  return INHERIT_MAP[gateStage] ?? []
+}

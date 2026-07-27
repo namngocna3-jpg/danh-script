@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChatGateStage } from '@shared/types'
-import { useWizard, stageHasPlan, type GateId } from '../../wizardStore'
+import { useWizard, type GateId } from '../../wizardStore'
 import { StepStream } from './StepStream'
 import { ReviewBadge } from './ReviewBadge'
 import { Markdown } from './Markdown'
@@ -36,20 +36,37 @@ export function GateChatPanel({
   const confirmGate = useWizard((s) => s.confirmGate)
   const doReview = useWizard((s) => s.review)
   const loadPlan = useWizard((s) => s.loadPlan)
+  const loadAssets = useWizard((s) => s.loadAssets)
+  const loadBlocks = useWizard((s) => s.loadBlocks)
   const wizardError = useWizard((s) => s.wizardError)
   const clearError = useWizard((s) => s.clearError)
+  const clearSteps = useWizard((s) => s.clearSteps)
 
   const [input, setInput] = useState('')
   const busy = chatBusy === stage
   const anyBusy = chatBusy !== null || reviewing !== null
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // Mở cổng: CHỈ nạp lịch sử (+ plan để hiện output). KHÔNG tự chạy kickoff — chờ
-  // người dùng bấm "▶ Bắt đầu" mới gọi trợ lý (tránh mỗi lần bấm tab là chạy tốn lượt).
+  // Mở cổng: nạp lịch sử + LUÔN nạp plan (khung xương/chuyển thể/đạo diễn/hệ thị giác) + assets.
+  // Vì sao LUÔN nạp (không chỉ PLAN_STAGES): các cổng SAU (đạo diễn/nguyên liệu/phân cảnh)
+  // KHÔNG tự ghi khung xương nhưng KẾ THỪA nó ở panel "📥 Kế thừa từ bước trước" + cột output.
+  // Nếu chỉ nạp ở PLAN_STAGES thì mở thẳng vào Phân cảnh → plan=null → panel hiện "Chưa có..."
+  // dù DB có đủ.
+  // ⭐ loadAssets cũng LUÔN nạp: assetsFull/coverage/visualSystem TRƯỚC ĐÂY chỉ nạp khi mở panel
+  // Nguyên liệu (AssetStudioPanel) hoặc chạy chat gate_assets/gate_storyboard. Mở lại app rồi
+  // nhảy thẳng vào Phân cảnh/Prompt ảnh/Prompt video → assetsFull=[] → panel "Kế thừa" hiện
+  // "Chưa có nguyên liệu" dù DB có đủ (phải mở lại bước Nguyên liệu nó mới nạp). Nạp mọi cổng để hết.
+  // loadPlan/loadAssets chỉ đọc DB (rẻ) nên nạp mọi cổng là an toàn.
+  // KHÔNG tự chạy kickoff — chờ người dùng bấm "▶ Bắt đầu" mới gọi trợ lý (tránh tốn lượt).
   useEffect(() => {
+    clearSteps() // dọn log tiến độ của cổng CŨ để không rò sang cổng này (steps là biến toàn cục)
     void (async () => {
       await loadChat(projectId, stage)
-      if (stageHasPlan(stage)) void loadPlan(projectId)
+      void loadPlan(projectId)
+      void loadAssets(projectId)
+      // ⭐ blocks cũng LUÔN nạp (cùng lý do assets): mở lại app rồi nhảy thẳng vào Prompt ảnh/
+      // Prompt video → blocks=[] → cột kết quả trống dù DB có đủ. Chỉ đọc DB nên rẻ.
+      void loadBlocks(projectId)
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, stage])

@@ -4,6 +4,7 @@ import { Sidebar } from './ui/Sidebar'
 import { Dashboard } from './ui/Dashboard'
 import { SettingsModal } from './ui/SettingsModal'
 import { WizardView } from './ui/wizard/WizardView'
+import { ErrorBoundary } from './ui/ErrorBoundary'
 
 export default function App(): JSX.Element {
   const loadProjects = useApp((s) => s.loadProjects)
@@ -21,7 +22,13 @@ export default function App(): JSX.Element {
     <div className="aurora flex h-full w-full overflow-hidden">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
-        {activeProject ? <WizardView project={activeProject} /> : <Dashboard />}
+        {activeProject ? (
+          <ErrorBoundary area="Wizard">
+            <WizardView project={activeProject} />
+          </ErrorBoundary>
+        ) : (
+          <Dashboard />
+        )}
       </main>
       {settingsOpen && <SettingsModal onClose={closeSettings} />}
     </div>

@@ -28,7 +28,9 @@ import type {
   PlanArtifacts,
   AssetFull,
   AssetCoverage,
-  VisualSystem
+  IdentityLock,
+  VisualSystem,
+  BlockView
 } from '../shared/types'
 
 // Re-export để renderer import gọn qua 1 chỗ (nếu cần).
@@ -125,6 +127,22 @@ export interface DanhScriptApi {
     full: (projectId: number) => Promise<IpcResult<AssetFull[]>>
     coverage: (projectId: number) => Promise<IpcResult<AssetCoverage>>
     visualSystem: (projectId: number) => Promise<IpcResult<VisualSystem | null>>
+    /** ⭐ Khóa mặt bằng TAY (không cần qua agent) — trả danh sách asset đã cập nhật. */
+    lock: (
+      projectId: number,
+      tag: string,
+      lock: Partial<IdentityLock>
+    ) => Promise<IpcResult<AssetFull[]>>
+    /** ⭐ Đọc ảnh tư liệu của @tag → hồ sơ ĐỀ XUẤT (không tự lưu, người dùng duyệt trước). */
+    readImage: (
+      projectId: number,
+      tag: string
+    ) => Promise<
+      IpcResult<{ lock: Partial<IdentityLock>; notes: string; imageCount: number }>
+    >
+  }
+  blocks: {
+    list: (projectId: number) => Promise<IpcResult<BlockView[]>>
   }
   styles: {
     list: () => Promise<IpcResult<StyleOption[]>>
@@ -198,8 +216,8 @@ const api: DanhScriptApi = {
     history: (projectId) => ipcRenderer.invoke('orchestrator:history', projectId),
     onStep: (cb) => {
       const listener = (_e: unknown, step: AgentStep): void => cb(step)
-      ipcRenderer.on('gate:step', listener)
-      return () => ipcRenderer.removeListener('gate:step', listener)
+      ipcRenderer.on('orchestrator:step', listener)
+      return () => ipcRenderer.removeListener('orchestrator:step', listener)
     }
   },
   project2: {
@@ -224,7 +242,12 @@ const api: DanhScriptApi = {
   assets2: {
     full: (projectId) => ipcRenderer.invoke('assets2:full', projectId),
     coverage: (projectId) => ipcRenderer.invoke('assets2:coverage', projectId),
-    visualSystem: (projectId) => ipcRenderer.invoke('assets2:visualSystem', projectId)
+    visualSystem: (projectId) => ipcRenderer.invoke('assets2:visualSystem', projectId),
+    lock: (projectId, tag, lock) => ipcRenderer.invoke('assets2:lock', projectId, tag, lock),
+    readImage: (projectId, tag) => ipcRenderer.invoke('assets2:readImage', projectId, tag)
+  },
+  blocks: {
+    list: (projectId) => ipcRenderer.invoke('blocks:list', projectId)
   },
   styles: {
     list: () => ipcRenderer.invoke('styles:list')

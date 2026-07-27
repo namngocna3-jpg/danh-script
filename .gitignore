@@ -17,3 +17,9 @@ settings.json
 
 # Cache tool impeccable (không thuộc dự án)
 .impeccable/
+
+# Bản build tạm cho test thuần (npx esbuild ... --outfile=_handoff/.anchor.build.mjs)
+# Sinh tự động từ mã nguồn — lệnh dựng lại ghi ở đầu file test tương ứng.
+# (.electron-stub.mjs thì GIỮ: đó là mã viết tay, không sinh ra được.)
+_handoff/.anchor.build.mjs
+_handoff/.gw.build.mjs

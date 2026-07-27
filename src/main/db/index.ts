@@ -5,6 +5,7 @@ import Database from 'better-sqlite3'
 import { app } from 'electron'
 import { readFileSync, copyFileSync } from 'fs'
 import { join } from 'path'
+import { hasLock, checkPromptDrift, type DriftIssue } from '../../shared/anchor'
 import type {
   CreateProjectInput,
   Project,
@@ -26,7 +27,10 @@ import type {
   AssetFull,
   AssetDerivative,
   AssetCoverage,
-  DeriveKind
+  DeriveKind,
+  BlockView,
+  VideoPrompt,
+  ShotPanel
 } from '../../shared/types'
 import { stageRank } from '../../shared/wizardSteps'
 
@@ -391,6 +395,51 @@ export function listBlockAssets(blockId: number): number[] {
   return rows.map((r) => r.asset_id)
 }
 
+/**
+ * ⭐ Đọc TOÀN BỘ block của dự án cho MÀN WIZARD (cột kết quả GATE 2/3/phân cảnh).
+ * Khác buildExport: trả @tag dạng CHỮ (join sang assets) + shot_panel đã parse, để UI
+ * hiện thẳng không cần Xuất bản. JSON hỏng thì trả null cho trường đó, KHÔNG ném lỗi —
+ * một block lỗi không được làm sập cả danh sách.
+ */
+export function listBlockViews(projectId: number): BlockView[] {
+  const d = getDb()
+  const out: BlockView[] = []
+
+  const tagStmt = d.prepare(
+    `SELECT a.variations_json AS variations_json
+       FROM block_assets ba JOIN assets a ON a.id = ba.asset_id
+      WHERE ba.block_id = ? ORDER BY a.id`
+  )
+
+  for (const s of listScenes(projectId)) {
+    for (const b of listBlocks(s.id)) {
+      const rows = tagStmt.all(b.id) as Array<{ variations_json: string | null }>
+      out.push({
+        block_id: b.id,
+        scene_order: s.order_idx,
+        scene_summary: s.summary ?? '',
+        block_order: b.order_idx,
+        shot_desc: b.shot_desc,
+        image_prompt_en: b.image_prompt_en,
+        video_prompt: safeParse<VideoPrompt>(b.video_prompt_json),
+        shot_panel: safeParse<ShotPanel>(b.shot_panel_json),
+        asset_tags: rows.map((r) => tagOf(r)).filter((t) => t !== '')
+      })
+    }
+  }
+  return out
+}
+
+/** Parse JSON an toàn: hỏng/null → null (không ném). */
+function safeParse<T>(raw: string | null): T | null {
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as T
+  } catch {
+    return null
+  }
+}
+
 /** Lưu/cập nhật asset theo tag (unique trong dự án). Trả về asset.id. */
 export function saveAsset(
   projectId: number,
@@ -630,6 +679,51 @@ export function saveAssetPrompt(assetId: number, prompt: string): void {
   getDb().prepare('UPDATE assets SET gen_prompt = ? WHERE id = ?').run(prompt, assetId)
 }
 
+/**
+ * ⭐ Ghi KHÓA NHẬN DẠNG (anchor) cho 1 asset theo @tag — dùng ở cổng Nguyên liệu.
+ *
+ * Vì sao cần hàm riêng: `saveAsset` TẠO MỚI nếu chưa có tag, dễ đẻ asset trùng khi thợ
+ * gõ sai tag. Hàm này CHỈ cập nhật asset đã tồn tại, sai tag thì BÁO LỖI để thợ sửa.
+ * MERGE theo trường: chỉ ghi đè trường có nội dung mới → gọi nhiều lượt bổ sung dần
+ * không xóa mất phần đã khóa trước đó.
+ */
+export function saveIdentityLockByTag(
+  projectId: number,
+  tag: string,
+  lock: Partial<IdentityLock>
+): void {
+  const d = getDb()
+  const row = d
+    .prepare(
+      `SELECT id, identity_lock_json FROM assets
+        WHERE project_id = ? AND json_extract(variations_json,'$.tag') = ?`
+    )
+    .get(projectId, tag) as { id: number; identity_lock_json: string | null } | undefined
+  if (!row) throw new Error(`Không có @tag "${tag}" để ghi khóa nhận dạng`)
+
+  const cur = parseIdentityLock(row.identity_lock_json) ?? { face: '', body: '' }
+  const pick = (k: keyof IdentityLock): string | undefined => {
+    const v = lock[k]
+    return typeof v === 'string' && v.trim() ? v.trim() : undefined
+  }
+  const merged: IdentityLock = {
+    face: pick('face') ?? cur.face,
+    body: pick('body') ?? cur.body,
+    features: pick('features') ?? cur.features,
+    signature: pick('signature') ?? cur.signature,
+    hair: pick('hair') ?? cur.hair,
+    wardrobe: pick('wardrobe') ?? cur.wardrobe,
+    age: pick('age') ?? cur.age,
+    aura: pick('aura') ?? cur.aura,
+    demeanor: pick('demeanor') ?? cur.demeanor,
+    voice: pick('voice') ?? cur.voice
+  }
+  d.prepare('UPDATE assets SET identity_lock_json = ? WHERE id = ?').run(
+    JSON.stringify(merged),
+    row.id
+  )
+}
+
 /** Ghi prompt sinh ảnh theo @tag (tiện cho tool của agent). */
 export function saveAssetPromptByTag(projectId: number, tag: string, prompt: string): void {
   const d = getDb()
@@ -733,13 +827,32 @@ export function saveDerivedAsset(
   return Number(info.lastInsertRowid)
 }
 
-/** Parse an toàn identity_lock_json → IdentityLock (null nếu trống/hỏng). */
+/** Lấy 1 trường chuỗi của IdentityLock, bỏ qua giá trị không phải chuỗi (LLM trả sai kiểu). */
+function lockField(o: Partial<IdentityLock>, k: keyof IdentityLock): string | undefined {
+  const v = o[k]
+  return typeof v === 'string' && v.trim() ? v.trim() : undefined
+}
+
+/**
+ * Parse an toàn identity_lock_json → IdentityLock (null nếu trống/hỏng).
+ * ⭐ Giữ ĐỦ 6 trường (face/body + features/hair/age/aura). Trước đây chỉ giữ face+body
+ * nên 4 trường mới bị VỨT khi đọc lại từ DB → khối anchor mất chi tiết → mặt vẫn trôi.
+ * Dữ liệu cũ (chỉ có face/body) vẫn đọc bình thường: 4 trường mới = undefined.
+ */
 function parseIdentityLock(json: string | null): IdentityLock | null {
   if (!json?.trim()) return null
   try {
     const o = JSON.parse(json) as Partial<IdentityLock>
-    if (!o || (typeof o.face !== 'string' && typeof o.body !== 'string')) return null
-    return { face: o.face ?? '', body: o.body ?? '' }
+    if (!o || typeof o !== 'object') return null
+    const face = lockField(o, 'face')
+    const body = lockField(o, 'body')
+    const features = lockField(o, 'features')
+    const hair = lockField(o, 'hair')
+    const age = lockField(o, 'age')
+    const aura = lockField(o, 'aura')
+    // Không có trường nào có nội dung → coi như chưa khóa.
+    if (!face && !body && !features && !hair && !age && !aura) return null
+    return { face: face ?? '', body: body ?? '', features, hair, age, aura }
   } catch {
     return null
   }
@@ -786,13 +899,105 @@ export function assetCoverage(projectId: number): AssetCoverage {
     .all(projectId) as Asset[]
   const missingPrompt: string[] = []
   const missingImage: string[] = []
+  const missingIdentity: string[] = []
   for (const r of rows) {
     const tag = tagOf(r)
     if (!tag) continue
     if (!r.gen_prompt?.trim()) missingPrompt.push(tag)
     else if (!r.ref_image_path?.trim()) missingImage.push(tag)
+    // ⭐ Chỉ soát asset GỐC (parent_id null): phái sinh kế thừa mặt của gốc, không cần
+    // khóa riêng. char + product cần khóa (mặt/hình dạng); prop/scene không bắt buộc.
+    if (r.parent_id === null && (r.type === 'char' || r.type === 'product')) {
+      if (!hasLock(parseIdentityLock(r.identity_lock_json))) missingIdentity.push(tag)
+    }
   }
-  return { total: rows.length, missingPrompt, missingImage }
+  return { total: rows.length, missingPrompt, missingImage, missingIdentity }
+}
+
+/**
+ * ⭐ SOÁT TRÔI MẶT toàn dự án (Level 3) — ép tự kiểm tra tính nhất quán.
+ *
+ * Hai lá chắn trước (khóa nhận dạng + app chèn anchor) đảm bảo prompt CÓ hồ sơ gốc.
+ * Lá chắn này bắt lỗi còn lại: thợ tả CHỒNG ngoại hình ở thân prompt. Hai mô tả cùng
+ * tồn tại → model chọn bừa → mặt vẫn trôi dù đã có anchor.
+ *
+ * Chỉ soát block có nhắc @tag nhân vật/sản phẩm đã khóa; block cảnh nền thuần bỏ qua.
+ */
+export function identityDriftReport(projectId: number): {
+  checked: number
+  clean: number
+  locked_tags: string[]
+  unlocked_tags: string[]
+  warning?: string
+  blocks: Array<{
+    scene_order: number
+    block_order: number
+    issues: DriftIssue[]
+  }>
+} {
+  const assets = listAssetsFull(projectId)
+  const charTags = assets.filter((a) => hasLock(a.identity_lock)).map((a) => a.tag)
+  // ⚠️ BẪY "SẠCH GIẢ": nếu KHÔNG asset nào khóa thì charTags rỗng → checkPromptDrift
+  // bỏ qua mọi block → báo cáo về "clean = checked" trông như đạt 100%, trong khi thực
+  // tế KHÔNG có lá chắn nào đang chạy. Phải nêu rõ để thợ/người dùng không hiểu nhầm.
+  const unlockedTags = assetCoverage(projectId).missingIdentity
+
+  const out: Array<{ scene_order: number; block_order: number; issues: DriftIssue[] }> = []
+  let checked = 0
+  let clean = 0
+
+  for (const b of listBlockViews(projectId)) {
+    const p = b.image_prompt_en?.trim()
+    if (!p) continue
+    checked++
+    const issues = checkPromptDrift(p, charTags)
+    if (!issues.length) clean++
+    else out.push({ scene_order: b.scene_order, block_order: b.block_order, issues })
+  }
+
+  const warning = charTags.length
+    ? undefined
+    : `⚠️ CHƯA asset nào được khóa nhận dạng${unlockedTags.length ? ` (thiếu: ${unlockedTags.join(', ')})` : ''} — ` +
+      `kết quả soát này KHÔNG có giá trị: không có hồ sơ gốc thì không có gì để đối chiếu, ` +
+      `và anchor_applied sẽ luôn false. Hãy gọi lock_identity cho các @tag đó TRƯỚC, rồi ghi lại prompt ảnh.`
+
+  return { checked, clean, locked_tags: charTags, unlocked_tags: unlockedTags, warning, blocks: out }
+}
+
+/**
+ * ⭐ SOÁT TRÔI MẶT cho prompt VIDEO — cùng lá chắn, khác luật.
+ *
+ * Khác prompt ảnh ở 2 điểm:
+ * 1. KHÔNG đòi khối [IDENTITY LOCK]: video nhận danh tính từ ẢNH đầu vào (first frame),
+ *    không từ chữ → app không chèn anchor vào prompt video, đòi là báo lỗi oan 100%.
+ * 2. Soát trên 2 field `scene` + `motion` gộp lại (VideoPrompt là JSON, không phải 1 chuỗi).
+ *
+ * Thứ VẪN phải bắt: tả chồng ngoại hình. Prompt video mà viết "a young Asian woman climbs"
+ * là bảo model VẼ LẠI mặt thay vì bám ảnh gốc → mất công khóa mặt ở bước ảnh.
+ */
+export function videoDriftReport(projectId: number): {
+  checked: number
+  clean: number
+  locked_tags: string[]
+  blocks: Array<{ scene_order: number; block_order: number; issues: DriftIssue[] }>
+} {
+  const assets = listAssetsFull(projectId)
+  const charTags = assets.filter((a) => hasLock(a.identity_lock)).map((a) => a.tag)
+  const out: Array<{ scene_order: number; block_order: number; issues: DriftIssue[] }> = []
+  let checked = 0
+  let clean = 0
+
+  for (const b of listBlockViews(projectId)) {
+    const vp = b.video_prompt
+    if (!vp) continue
+    const text = [vp.scene, vp.motion, vp.constraints].filter(Boolean).join(' ')
+    if (!text.trim()) continue
+    checked++
+    const issues = checkPromptDrift(text, charTags, { requireAnchor: false })
+    if (!issues.length) clean++
+    else out.push({ scene_order: b.scene_order, block_order: b.block_order, issues })
+  }
+  return { checked, clean, locked_tags: charTags, blocks: out }
 }
 
 // ---------------- Hội thoại tinh chỉnh từng GATE ----------------

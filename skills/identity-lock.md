@@ -4,9 +4,66 @@
 
 ## Nguyên tắc
 
-1. **Chỉ khóa CỨNG mặt + dáng** (`identity_lock.face`, `identity_lock.body`). Đây là thứ giữ nhân vật "vẫn là người đó" xuyên mọi cảnh.
-2. **MỀM đồ/tóc/đạo cụ** — đổi theo cảnh (theo era ở lớp B). Cảnh cổ đại mặc đồ cổ, cảnh hiện đại mặc đồ thường — VẪN là một người.
-3. **Mỗi nhân vật/đạo cụ quan trọng = 1 @tag.** Tag VIẾT HOA không dấu: `@ADIL`, `@REMOTE`, `@LAN`. Gọi `save_asset` để tạo tag.
+1. **HỒ SƠ GỐC = trụ chống trôi mặt.** Gọi `lock_identity` cho MỌI asset `char` và `product`. Hồ sơ chia **2 tầng**.
+
+   **TẦNG ẢNH** — app ghép thành khối `[IDENTITY LOCK]`, chèn vào 100% prompt ảnh (thứ tự dưới đây = đúng thứ tự ghép):
+
+   | Trường | Nội dung | Ví dụ |
+   |---|---|---|
+   | `age` | Tuổi cụ thể | `26` |
+   | `face` | Hình mặt · tông da | `Oval face, warm tan skin` |
+   | `features` | **Ngũ quan chi tiết** — quyết định giống/khác nhiều nhất | `Single-fold almond eyes slightly downturned, straight nose bridge, full lower lip, high cheekbones` |
+   | `signature` ⭐ | **Dấu nhận diện cố định** — nốt ruồi (RÕ vị trí) · sẹo · tàn nhang · xăm · răng khểnh | `Small mole below the outer corner of the left eye, faint scar through right eyebrow` |
+   | `hair` | Màu · độ dài · kiểu · ngôi rẽ (mặc định) | `Black hair, shoulder-length, center part, slight natural wave` |
+   | `body` | Tỉ lệ đầu-thân · thể trạng · tư thế | `Athletic build, 7.5-head proportion, broad shoulders, upright posture` |
+   | `wardrobe` | Trang phục ký hiệu + phụ kiện — **có điều kiện**, xem #1bis | `Round tortoiseshell glasses, teal brand hoodie` |
+   | `aura` | Khí chất — **ngôn ngữ so sánh trừu tượng**, KHÔNG tên người thật | `quiet stubborn intensity, the calm of someone used to being underestimated` |
+
+   **TẦNG ĐỘNG** — KHÔNG vào prompt ảnh, chỉ hiện ở cổng Video:
+
+   | Trường | Nội dung | Ví dụ |
+   |---|---|---|
+   | `demeanor` | Dáng đi · cử chỉ quen · độ nghiêng đầu khi nói | `Long unhurried strides, tilts head slightly left when listening` |
+   | `voice` | Cao độ · âm sắc · nhịp nói · giọng vùng miền | `Low warm alto, unhurried pacing, soft Southern Vietnamese accent` |
+
+   Viết **TIẾNG ANH**, tả **cụ thể đo đếm được**. CẤM chung chung ("đẹp", "cuốn hút") — model không bám được thứ mơ hồ.
+
+   ⭐ **`signature` là ô đáng giá nhất trên mỗi đơn vị chữ.** Model dễ vẽ trùng "khuôn mặt trái xoan da nâu" giữa hai người khác nhau, nhưng "nốt ruồi dưới đuôi mắt trái" thì gần như không trùng ngẫu nhiên. Kịch bản không nêu → tự nghĩ 1–2 dấu nhỏ hợp lý rồi khóa. Đừng nhồi 5 dấu: nhiều quá thì model bỏ bớt, mất luôn cái quan trọng.
+
+1bis. ⚠️ **`wardrobe` — con dao hai lưỡi.** Ô này chèn vào **MỌI** prompt ảnh.
+   - ✅ **Điền** khi nhân vật mặc cùng một bộ xuyên suốt: mascot, KOL có đồng phục, kính/đồng hồ không bao giờ tháo, nhân vật hoạt hình.
+   - ❌ **Bỏ trống** khi phim có nhiều bối cảnh và nhân vật đổi đồ. Anchor ghi "hoodie xanh" mà cảnh 3 nhân vật mặc áo mưa = hai mô tả chống nhau trong cùng prompt = model chọn bừa. Khi đó trang phục thuộc **lớp mềm theo cảnh**, không thuộc hồ sơ gốc.
+
+1ter. **Vì sao tách tầng động ra khỏi prompt ảnh.** Ảnh tĩnh không có dáng đi và không có giọng nói — nhét vào chỉ làm prompt dài thêm mà không thêm tín hiệu nào, trong khi BytePlus khuyến nghị: có ảnh tham chiếu thì prompt phải **ngắn lại**, không dài ra. Nhưng bỏ hẳn thì thợ video mỗi block cho nhân vật một dáng đi khác nhau. Nên app giữ 2 ô đó và chỉ bơm ở **cổng Video**, dưới dạng ghi chú định hướng — thợ đọc để viết `motion`/`audio`, **không chép vào prompt**.
+
+2. **Kịch bản không tả mặt → TỰ QUYẾT rồi khóa.** Thà chốt một phương án còn hơn để trống: để trống nghĩa là mỗi block tự bịa một kiểu → mỗi block một khuôn mặt.
+
+3. **MỀM đồ/tóc/đạo cụ** — đổi theo cảnh (lớp L1–L5). Cảnh cổ đại mặc đồ cổ, cảnh hiện đại mặc đồ thường — VẪN là một người.
+
+4. **Mỗi nhân vật/đạo cụ quan trọng = 1 @tag.** Tag VIẾT HOA không dấu: `@ADIL`, `@REMOTE`, `@LAN`.
+
+## Khối ANCHOR — copy nguyên văn, cấm viết lại
+
+App **tự ghép** các trường tầng ảnh thành 1 khối bất biến và **chèn vào đầu 100% prompt ảnh**:
+
+```
+[IDENTITY LOCK — DO NOT ALTER]
+@NUCHINH: 26. Oval face, warm tan skin.
+Single-fold almond eyes slightly downturned, straight nose bridge, full lower lip.
+Small mole below the outer corner of the left eye.
+Black hair, shoulder-length, center part. Athletic build, 7.5-head proportion.
+Quiet stubborn intensity.
+[END IDENTITY LOCK]
+
+Setting: ... / Action: ... / Style: ...
+```
+
+**Vì sao phải app ghép chứ không để thợ tự viết:** thợ diễn giải lại theo lời của nó ở từng block → 16 block = 16 mô tả khác nhau = 16 khuôn mặt. App ghép thì 16/16 giống nhau **đến từng ký tự**.
+
+**Luật cho người viết prompt:**
+- Khối anchor đứng ĐẦU, tách bạch, **không trộn** với bối cảnh/hành động.
+- Sau khối đó **CẤM tả lại** mặt/ngũ quan/dáng bằng lời của bạn — mô tả chồng lấn sẽ xung đột và làm loạn mặt.
+- Chỉ viết phần **MỀM**: bối cảnh → hành động → phong cách hình ảnh, theo đúng thứ tự, mỗi phần một khối.
 
 ## Quy ước @tag trong prompt (BẮT BUỘC — giống 5 nguồn)
 
@@ -14,11 +71,13 @@ Khi prompt nhắc tới nhân vật/đạo cụ đã có asset, PHẢI:
 - Nhúng `@Tag` tại đúng vị trí. VD: *"in @ADIL's eyeline"*, *"@REMOTE stays normal household remote size"*.
 - Với asset khóa cứng, thêm câu khẳng định nhất quán:
   *"Wardrobe/face comes from the @ADIL reference and stays identical across the whole take."*
-- KHÔNG mô tả lại mặt/dáng bằng lời khi đã có @tag — để @tag + ảnh tư liệu lo. Chỉ mô tả phần MỀM (đồ theo cảnh, hành động).
+- KHÔNG mô tả lại mặt/dáng bằng lời khi đã có @tag — để @tag + khối anchor + ảnh tư liệu lo.
 
 ## Ai tạo tag?
 
-`assetDeriver` (cổng NGUYÊN LIỆU / gate_assets) TÁCH @tag TỪ kịch bản final: đọc toàn văn narration (`read_script_full`) rồi `derive_assets` cho nhân vật/bối cảnh/đạo cụ LẶP LẠI thật sự có trong kịch bản. `ideaAnalyst` (gate0) CHỈ chốt ý đồ — KHÔNG tạo cảnh, KHÔNG tạo @tag. Mặt/dáng để trống nếu kịch bản chưa tả; người dùng bổ sung ảnh tư liệu sau.
+`assetDeriver` (cổng NGUYÊN LIỆU / gate_assets) TÁCH @tag TỪ kịch bản final: đọc toàn văn narration (`read_script_full`) rồi `derive_assets` cho nhân vật/bối cảnh/đạo cụ LẶP LẠI thật sự có trong kịch bản. `ideaAnalyst` (gate0) CHỈ chốt ý đồ — KHÔNG tạo cảnh, KHÔNG tạo @tag.
+
+Ngay sau `derive_assets`, cùng thợ đó gọi `lock_identity` cho từng `char`/`product`. **Không được để trống chờ người dùng**: cổng Nguyên liệu sẽ CHẶN chốt khi còn tag chưa khóa (`read_asset_coverage.missingIdentity`). Ảnh tư liệu người dùng bổ sung sau là lớp *cộng thêm*, không thay được hồ sơ chữ.
 
 ## Phái sinh phân lớp L0 → L5 (mượn art_character_derivative)
 

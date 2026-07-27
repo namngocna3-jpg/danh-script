@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import type {
   ChatGateStage,
   StorySkeleton,
@@ -8,23 +8,45 @@ import type {
   AssetFull,
   VisualSystem,
   IdealBrief,
-  ShotPanel
+  ShotPanel,
+  BlockView,
+  VideoPrompt
 } from '@shared/types'
 import { useWizard } from '../../wizardStore'
 
 /**
+ * Chuẩn hóa MỌI giá trị "đáng lẽ là mảng" từ LLM về đúng mảng.
+ * Vì sao cần: model đôi khi trả 1 CHUỖI thay cho string[] (VD triggers: "khan hiếm, FOMO").
+ * Chuỗi vẫn có .length nên lọt guard `x.length > 0`, rồi .join/.map nổ TypeError →
+ * cả Wizard "màn hình đen". Helper này: mảng giữ nguyên · chuỗi tách theo dấu ·,;\n ·
+ * giá trị khác → bọc thành 1 phần tử · rỗng → []. Không bao giờ ném lỗi.
+ */
+function toArr(v: unknown): string[] {
+  if (Array.isArray(v)) return v.map((x) => String(x)).filter((s) => s.trim())
+  if (typeof v === 'string') {
+    return v
+      .split(/[·,;\n]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+  }
+  if (v == null) return []
+  return [String(v)]
+}
+
+/**
  * PANEL OUTPUT theo bước — render trọn vẹn kết quả hiện tại của từng stage ở CỘT PHẢI.
  * Đọc data từ store (useWizard): plan (brief/draft/skeleton/adaptation/director/visualSystem),
- * assetsFull, visualSystem. Mỗi nhánh thiếu data → hiển thị gọn ("Chưa có"),
+ * assetsFull, visualSystem, blocks. Mỗi nhánh thiếu data → hiển thị gọn ("Chưa có"),
  * KHÔNG crash. Tái dùng logic hiển thị từ PlanArtifactsView / AssetStudioPanel / DirectorPanel.
  *
- * ⚠️ Store hiện KHÔNG expose blocks/shot_panel_json ra renderer (chỉ có gate.plan + assets2.*),
- * nên StoryboardOutput / prompt ảnh / prompt video render placeholder (xem TODO trong report).
+ * ⭐ blocks (BlockView[]) đến từ kênh IPC blocks:list — nhờ đó phân cảnh / prompt ảnh /
+ * prompt video hiện THẲNG ở đây, không phải Xuất bản mới xem được như trước.
  */
 export function StageOutputView({ stage }: { stage: ChatGateStage }): JSX.Element | null {
   const plan = useWizard((s) => s.plan)
   const assetsFull = useWizard((s) => s.assetsFull)
   const visualSystem = useWizard((s) => s.visualSystem)
+  const blocks = useWizard((s) => s.blocks)
 
   switch (stage) {
     // Ý đồ chốt (GATE 0) — đọc từ plan.brief (ideal_json.brief), khớp luồng chat gộp.
@@ -102,33 +124,27 @@ export function StageOutputView({ stage }: { stage: ChatGateStage }): JSX.Elemen
         </Section>
       )
 
-    // Phân cảnh (storyboard)
+    // Phân cảnh (storyboard) — đọc thẳng blocks.shot_panel
     case 'gate_storyboard':
       return (
-        <Section title="🎞️ Phân cảnh (storyboard)">
-          <StoryboardOutput />
+        <Section title={`🎞️ Phân cảnh (storyboard)${countLabel(blocks.length)}`}>
+          <StoryboardOutput blocks={blocks} />
         </Section>
       )
 
-    // Prompt ảnh — nằm trong blocks (chưa expose ra renderer)
+    // Prompt ảnh khung đầu — blocks.image_prompt_en
     case 'gate2_image':
       return (
-        <Section title="🖼️ Prompt sinh ảnh">
-          <Empty>
-            Prompt ảnh được sinh theo từng block và lưu trong dự án. Chưa có kênh đọc trực tiếp ở màn
-            này — dùng bước Xuất bản để lấy trọn bộ prompt.
-          </Empty>
+        <Section title={`🖼️ Prompt sinh ảnh${countLabel(blocks.filter((b) => b.image_prompt_en).length)}`}>
+          <ImagePromptOutput blocks={blocks} />
         </Section>
       )
 
-    // Prompt video — nằm trong blocks (chưa expose ra renderer)
+    // Prompt video 7 trường — blocks.video_prompt
     case 'gate3_video':
       return (
-        <Section title="🎥 Prompt video">
-          <Empty>
-            Prompt video được sinh theo từng block và lưu trong dự án. Chưa có kênh đọc trực tiếp ở
-            màn này — dùng bước Xuất bản để lấy trọn bộ prompt.
-          </Empty>
+        <Section title={`🎥 Prompt video${countLabel(blocks.filter((b) => b.video_prompt).length)}`}>
+          <VideoPromptOutput blocks={blocks} />
         </Section>
       )
 
@@ -216,11 +232,11 @@ function AdaptationView({ adaptation }: { adaptation: AdaptationStrategy | null 
         {ad.approach}
         {ad.tone && <span className="text-slate-500"> · tông {ad.tone}</span>}
       </p>
-      {ad.show_dont_tell?.length > 0 && (
+      {toArr(ad.show_dont_tell).length > 0 && (
         <div className="space-y-1">
           <div className="text-xs text-slate-500">Cho xem thay vì kể:</div>
           <ul className="space-y-1">
-            {ad.show_dont_tell.map((s, i) => (
+            {toArr(ad.show_dont_tell).map((s, i) => (
               <li key={i} className="text-sm text-slate-300">
                 • {s}
               </li>
@@ -228,16 +244,16 @@ function AdaptationView({ adaptation }: { adaptation: AdaptationStrategy | null 
           </ul>
         </div>
       )}
-      {ad.visual_motifs && ad.visual_motifs.length > 0 && (
+      {toArr(ad.visual_motifs).length > 0 && (
         <p className="text-xs text-slate-400">
           <span className="text-slate-500">Motif hình: </span>
-          {ad.visual_motifs.join(' · ')}
+          {toArr(ad.visual_motifs).join(' · ')}
         </p>
       )}
-      {ad.pitfalls && ad.pitfalls.length > 0 && (
+      {toArr(ad.pitfalls).length > 0 && (
         <p className="text-xs text-slate-400">
           <span className="text-slate-500">Cạm bẫy né: </span>
-          {ad.pitfalls.join(' · ')}
+          {toArr(ad.pitfalls).join(' · ')}
         </p>
       )}
     </div>
@@ -301,7 +317,7 @@ function AssetsView({
   visual: VisualSystem | null
 }): JSX.Element {
   const hasVisual =
-    visual && (visual.color_script.length > 0 || visual.lighting || visual.texture)
+    visual && (toArr(visual.color_script).length > 0 || visual.lighting || visual.texture)
   if (!hasVisual && assets.length === 0) {
     return <Empty>Chưa có nguyên liệu. Nhắn trợ lý “tách nguyên liệu từ kịch bản”.</Empty>
   }
@@ -335,14 +351,16 @@ function AssetsView({
 
 /** Bảng Color Script + ánh sáng + chất liệu (tái dùng logic từ AssetStudioPanel). */
 function VisualSystemView({ vs }: { vs: VisualSystem | null }): JSX.Element | null {
-  if (!vs || (vs.color_script.length === 0 && !vs.lighting && !vs.texture)) return null
+  // Model có thể trả color_script sai kiểu (không phải mảng) → .slice().sort() nổ.
+  const colorScript = Array.isArray(vs?.color_script) ? vs.color_script : []
+  if (!vs || (colorScript.length === 0 && !vs.lighting && !vs.texture)) return null
   return (
     <div className="space-y-2">
       <div className="text-sm font-semibold text-white">🎨 Hệ thị giác · Color Script</div>
       {vs.palette_note && <p className="text-xs text-slate-400">{vs.palette_note}</p>}
-      {vs.color_script.length > 0 && (
+      {colorScript.length > 0 && (
         <div className="space-y-1">
-          {vs.color_script
+          {colorScript
             .slice()
             .sort((a, b) => a.scene_order - b.scene_order)
             .map((c) => (
@@ -406,59 +424,303 @@ function IdealBriefView({ brief }: { brief: IdealBrief }): JSX.Element {
       ) : (
         <Empty>Chưa có dữ liệu ý đồ.</Empty>
       )}
-      {brief.triggers && brief.triggers.length > 0 && (
+      {toArr(brief.triggers).length > 0 && (
         <p className="text-xs text-slate-400">
           <span className="text-slate-500">Trigger tâm lý: </span>
-          {brief.triggers.join(' · ')}
+          {toArr(brief.triggers).join(' · ')}
         </p>
       )}
     </div>
   )
 }
 
-/**
- * PHÂN CẢNH — mỗi cảnh → mỗi shot, parse blocks.shot_panel_json thành ShotPanel.
- *
- * ⚠️ HIỆN TẠI: store (useWizard) và preload (window.danh) CHƯA expose blocks/shot_panel_json
- * ra renderer — chỉ có gate.plan (PlanArtifacts) + assets2.* (AssetFull/coverage/visualSystem).
- * Không có kênh đọc block, nên đây là PLACEHOLDER. Khi có IPC trả về Block[] (kèm
- * shot_panel_json), thay placeholder bằng renderShotPanels() bên dưới (đã viết sẵn shape đúng).
- */
-function StoryboardOutput(): JSX.Element {
-  // Giữ helper để không phải viết lại khi store bổ sung blocks:
-  // const blocks = useWizard((s) => s.blocks)  ← chưa tồn tại
+/** Hậu tố " · N mục" cho tiêu đề Section (rỗng khi chưa có gì). */
+function countLabel(n: number): string {
+  return n > 0 ? ` · ${n} block` : ''
+}
+
+/** Nhãn "Cảnh x · Block y" dùng chung cho 3 panel block. */
+function BlockBadge({ b }: { b: BlockView }): JSX.Element {
   return (
-    <Empty>
-      Phân cảnh chi tiết (shot panel) được lưu theo từng block trong dự án. Màn này chưa có kênh đọc
-      trực tiếp block — hoàn tất bước phân cảnh ở cột trái, kết quả sẽ nằm trong bản xuất.
-    </Empty>
+    <span className="shrink-0 rounded bg-ink-800 px-1.5 py-0.5 text-[11px] font-medium text-amber-200">
+      Cảnh {b.scene_order} · Block {b.block_order}
+    </span>
   )
 }
 
 /**
- * Render 1 shot panel đã parse (dùng khi store expose blocks trong tương lai).
- * Giữ sẵn để khớp 11 field của ShotPanel — hiện KHÔNG được gọi (tránh dead-code lint,
- * export nội bộ qua StoryboardOutput khi có data).
+ * Số giây của 1 block — lấy từ shot_panel.duration_sec (nguồn duy nhất có độ dài shot).
+ * Trả null khi block chưa dựng shot panel → chỗ gọi tự ẩn.
  */
-export function ShotPanelCard({
-  panel,
-  sceneOrder,
-  shotOrder
+function durationOf(b: BlockView): number | null {
+  const d = b.shot_panel?.duration_sec
+  return typeof d === 'number' && d > 0 ? d : null
+}
+
+/** Chip "⏱ 4s" — để bạn biết cắt/render shot này dài bao nhiêu. */
+function SecBadge({ b }: { b: BlockView }): JSX.Element | null {
+  const d = durationOf(b)
+  if (d === null) return null
+  return (
+    <span className="shrink-0 rounded bg-ink-800 px-1.5 py-0.5 text-[11px] font-medium text-sky-300">
+      ⏱ {d}s
+    </span>
+  )
+}
+
+/**
+ * Dòng "Mô tả" ĐẦY ĐỦ của block (KHÔNG cắt bằng truncate như trước).
+ * Trước đây shot_desc bị nhét cùng hàng badge với class `truncate` → mất chữ, không
+ * đủ để đối chiếu khi đi render. Giờ tách riêng thành 1 dòng xuống hàng thoải mái.
+ */
+function ShotDesc({ text }: { text: string | null }): JSX.Element | null {
+  if (!text?.trim()) return null
+  return (
+    <p className="leading-relaxed text-slate-400">
+      <span className="text-slate-600">Mô tả: </span>
+      {text}
+    </p>
+  )
+}
+
+/** Tổng thời lượng các block (giây) — hiện ở đầu panel để biết phim dài bao nhiêu. */
+function totalSec(blocks: BlockView[]): number {
+  return blocks.reduce((sum, b) => sum + (durationOf(b) ?? 0), 0)
+}
+
+/** Nút copy 1 đoạn text ra clipboard (prompt dán sang Coco/Seedance). */
+function Copy({ text, label = 'Copy' }: { text: string; label?: string }): JSX.Element {
+  const [done, setDone] = useState(false)
+  return (
+    <button
+      className="shrink-0 rounded border border-ink-700 px-1.5 py-0.5 text-[11px] text-slate-400 hover:border-amber-glow/50 hover:text-amber-200"
+      onClick={() => {
+        void navigator.clipboard.writeText(text).then(() => {
+          setDone(true)
+          setTimeout(() => setDone(false), 1200)
+        })
+      }}
+    >
+      {done ? '✓ Đã copy' : label}
+    </button>
+  )
+}
+
+/** Gom block theo cảnh để render có tiêu đề cảnh. */
+function bySceneGroups(blocks: BlockView[]): Array<{ order: number; summary: string; items: BlockView[] }> {
+  const map = new Map<number, { order: number; summary: string; items: BlockView[] }>()
+  for (const b of blocks) {
+    const g = map.get(b.scene_order) ?? { order: b.scene_order, summary: b.scene_summary, items: [] }
+    g.items.push(b)
+    map.set(b.scene_order, g)
+  }
+  return [...map.values()].sort((a, b) => a.order - b.order)
+}
+
+/** Khung 1 cảnh: tiêu đề cảnh + danh sách block bên trong. */
+function SceneGroup({
+  group,
+  children
 }: {
-  panel: ShotPanel
-  sceneOrder: number
-  shotOrder: number
+  group: { order: number; summary: string }
+  children: ReactNode
 }): JSX.Element {
+  return (
+    <div className="space-y-2">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        Cảnh {group.order}
+        {group.summary && <span className="normal-case text-slate-600"> — {group.summary}</span>}
+      </div>
+      <div className="space-y-2">{children}</div>
+    </div>
+  )
+}
+
+/** PHÂN CẢNH — mỗi cảnh → mỗi shot, đọc blocks.shot_panel (đã parse ở main). */
+function StoryboardOutput({ blocks }: { blocks: BlockView[] }): JSX.Element {
+  if (blocks.length === 0) {
+    return <Empty>Chưa có phân cảnh. Nhắn trợ lý bên trái để dựng shot panel từng cảnh.</Empty>
+  }
+  const tot = totalSec(blocks)
+  return (
+    <div className="space-y-4">
+      {tot > 0 && (
+        <p className="text-[11px] text-slate-500">
+          Tổng thời lượng: <span className="text-sky-300">{tot}s</span> · {blocks.length} shot
+        </p>
+      )}
+      {bySceneGroups(blocks).map((g) => (
+        <SceneGroup key={g.order} group={g}>
+          {g.items.map((b) =>
+            b.shot_panel ? (
+              <ShotPanelCard key={b.block_id} panel={b.shot_panel} b={b} />
+            ) : (
+              <div
+                key={b.block_id}
+                className="space-y-1 rounded-lg border border-ink-800 bg-ink-950/40 px-3 py-2 text-xs"
+              >
+                <BlockBadge b={b} />
+                {b.shot_desc ? (
+                  <ShotDesc text={b.shot_desc} />
+                ) : (
+                  <p className="text-slate-600">Chưa có shot panel cho block này.</p>
+                )}
+              </div>
+            )
+          )}
+        </SceneGroup>
+      ))}
+    </div>
+  )
+}
+
+/** PROMPT ẢNH khung đầu — blocks.image_prompt_en, kèm nút copy từng prompt + copy tất cả. */
+function ImagePromptOutput({ blocks }: { blocks: BlockView[] }): JSX.Element {
+  const withPrompt = blocks.filter((b) => b.image_prompt_en)
+  if (withPrompt.length === 0) {
+    return <Empty>Chưa có prompt ảnh. Nhắn trợ lý bên trái để dựng prompt khung đầu từng block.</Empty>
+  }
+  // Header copy kèm số giây → dán ra ngoài vẫn biết shot dài bao nhiêu.
+  const all = withPrompt
+    .map((b) => {
+      const d = durationOf(b)
+      return `# Cảnh ${b.scene_order} · Block ${b.block_order}${d ? ` · ${d}s` : ''}\n${b.image_prompt_en}`
+    })
+    .join('\n\n')
+  const tot = totalSec(withPrompt)
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Copy text={all} label={`Copy tất cả (${withPrompt.length})`} />
+        {tot > 0 && <span className="text-[11px] text-sky-300">tổng {tot}s</span>}
+        <span className="text-[11px] text-slate-600">Dán sang Coco Studio để sinh ảnh khung đầu.</span>
+      </div>
+      {bySceneGroups(blocks).map((g) => (
+        <SceneGroup key={g.order} group={g}>
+          {g.items.map((b) => (
+            <div
+              key={b.block_id}
+              className="space-y-1.5 rounded-lg border border-ink-800 bg-ink-950/40 px-3 py-2 text-xs"
+            >
+              <div className="flex items-center gap-2">
+                <BlockBadge b={b} />
+                <SecBadge b={b} />
+                <span className="ml-auto" />
+                {b.image_prompt_en && <Copy text={b.image_prompt_en} />}
+              </div>
+              <ShotDesc text={b.shot_desc} />
+              {b.image_prompt_en ? (
+                <p className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-slate-300">
+                  {b.image_prompt_en}
+                </p>
+              ) : (
+                <p className="text-slate-600">Chưa có prompt ảnh.</p>
+              )}
+              {toArr(b.asset_tags).length > 0 && (
+                <p className="text-slate-500">{toArr(b.asset_tags).map((t) => '@' + t).join(' ')}</p>
+              )}
+            </div>
+          ))}
+        </SceneGroup>
+      ))}
+    </div>
+  )
+}
+
+/** Thứ tự 7 trường video hiển thị — khớp skill vidPrompter (motion mang tải chính). */
+const VIDEO_FIELDS: Array<{ key: keyof VideoPrompt; label: string }> = [
+  { key: 'style', label: 'style' },
+  { key: 'scene', label: 'scene' },
+  { key: 'motion', label: 'motion' },
+  { key: 'audio', label: 'audio' },
+  { key: 'text_overlay', label: 'text_overlay' },
+  { key: 'constraints', label: 'constraints' },
+  { key: 'negative', label: 'negative' }
+]
+
+/** Gộp 7 trường thành 1 khối text để dán sang Seedance. */
+function videoPromptText(vp: VideoPrompt): string {
+  return VIDEO_FIELDS.map(({ key, label }) => {
+    const v = vp[key]
+    return typeof v === 'string' && v.trim() ? `${label}: ${v}` : ''
+  })
+    .filter(Boolean)
+    .join('\n')
+}
+
+/** PROMPT VIDEO — 7 trường/block, kèm copy từng block + copy tất cả. */
+function VideoPromptOutput({ blocks }: { blocks: BlockView[] }): JSX.Element {
+  const withPrompt = blocks.filter((b) => b.video_prompt)
+  if (withPrompt.length === 0) {
+    return <Empty>Chưa có prompt video. Nhắn trợ lý bên trái để dựng 7 trường video từng block.</Empty>
+  }
+  const all = withPrompt
+    .map((b) => {
+      const d = durationOf(b)
+      return `# Cảnh ${b.scene_order} · Block ${b.block_order}${d ? ` · ${d}s` : ''}\n${videoPromptText(b.video_prompt as VideoPrompt)}`
+    })
+    .join('\n\n')
+  const tot = totalSec(withPrompt)
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Copy text={all} label={`Copy tất cả (${withPrompt.length})`} />
+        {tot > 0 && <span className="text-[11px] text-sky-300">tổng {tot}s</span>}
+        <span className="text-[11px] text-slate-600">Dán sang BytePlus/Seedance để render.</span>
+      </div>
+      {bySceneGroups(blocks).map((g) => (
+        <SceneGroup key={g.order} group={g}>
+          {g.items.map((b) => (
+            <div
+              key={b.block_id}
+              className="space-y-1.5 rounded-lg border border-ink-800 bg-ink-950/40 px-3 py-2 text-xs"
+            >
+              <div className="flex items-center gap-2">
+                <BlockBadge b={b} />
+                <SecBadge b={b} />
+                <span className="ml-auto" />
+                {b.video_prompt && <Copy text={videoPromptText(b.video_prompt)} />}
+              </div>
+              <ShotDesc text={b.shot_desc} />
+              {b.video_prompt ? (
+                <div className="space-y-1">
+                  {VIDEO_FIELDS.map(({ key, label }) => {
+                    const v = (b.video_prompt as VideoPrompt)[key]
+                    if (typeof v !== 'string' || !v.trim()) return null
+                    return (
+                      <p key={label} className="leading-relaxed text-slate-300">
+                        <span className="text-amber-200/70">{label}: </span>
+                        <span className="font-mono text-[11px]">{v}</span>
+                      </p>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="text-slate-600">Chưa có prompt video.</p>
+              )}
+              {toArr(b.asset_tags).length > 0 && (
+                <p className="text-slate-500">{toArr(b.asset_tags).map((t) => '@' + t).join(' ')}</p>
+              )}
+            </div>
+          ))}
+        </SceneGroup>
+      ))}
+    </div>
+  )
+}
+
+/** Render 1 shot panel đã parse (11 field của ShotPanel) + mô tả block + số giây. */
+function ShotPanelCard({ panel, b }: { panel: ShotPanel; b: BlockView }): JSX.Element {
   return (
     <div className="space-y-1 rounded-lg border border-ink-800 bg-ink-950/40 px-3 py-2 text-xs">
       <div className="flex items-center gap-2">
-        <span className="shrink-0 rounded bg-ink-800 px-1.5 py-0.5 text-[11px] font-medium text-amber-200">
-          Cảnh {sceneOrder} · Shot {shotOrder}
-        </span>
+        <BlockBadge b={b} />
+        <SecBadge b={b} />
         <span className="text-slate-400">
-          {panel.shot_size} · {panel.camera_angle} · {panel.camera_move} · {panel.duration_sec}s
+          {panel.shot_size} · {panel.camera_angle} · {panel.camera_move}
         </span>
       </div>
+      <ShotDesc text={b.shot_desc} />
       <p className="text-slate-300">{panel.subject}</p>
       <p className="text-slate-400">
         <span className="text-slate-500">Đầu: </span>
@@ -480,8 +742,8 @@ export function ShotPanelCard({
           {panel.cuts}
         </p>
       )}
-      {panel.asset_tags.length > 0 && (
-        <p className="text-slate-500">{panel.asset_tags.map((t) => '@' + t).join(' ')}</p>
+      {toArr(panel.asset_tags).length > 0 && (
+        <p className="text-slate-500">{toArr(panel.asset_tags).map((t) => '@' + t).join(' ')}</p>
       )}
       {panel.notes && <p className="text-slate-600">· {panel.notes}</p>}
     </div>

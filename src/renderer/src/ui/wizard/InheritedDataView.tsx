@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import type { ChatGateStage, PlanArtifacts, AssetFull, VisualSystem } from '@shared/types'
+import { inheritKeysFor, type InheritKey } from '@shared/wizardSteps'
 import { useWizard } from '../../wizardStore'
 
 /**
@@ -11,21 +12,6 @@ import { useWizard } from '../../wizardStore'
  * Chỉ render các artifact store renderer đang có (plan + assets2). Narration/blocks final
  * lưu theo cảnh trong DB, chưa expose ra renderer → không liệt kê ở đây (xem cột output).
  */
-type InheritKey = 'brief' | 'draft' | 'skeleton' | 'adaptation' | 'director' | 'visual' | 'assets'
-
-/** Mỗi stage kế thừa artifact nào của các bước TRƯỚC nó (theo thứ tự hiển thị). */
-const INHERIT_KEYS: Partial<Record<ChatGateStage, InheritKey[]>> = {
-  gate0_ideal: ['draft'],
-  gate1b_skeleton: ['brief', 'draft'],
-  gate1c_adaptation: ['brief', 'draft', 'skeleton'],
-  gate1d_script: ['brief', 'draft', 'skeleton', 'adaptation'],
-  gate_director: ['skeleton', 'adaptation'],
-  gate_assets: ['skeleton', 'adaptation', 'director', 'visual'],
-  gate_storyboard: ['skeleton', 'adaptation', 'director', 'assets'],
-  gate2_image: ['visual', 'assets'],
-  gate3_video: ['assets']
-}
-
 const KEY_TITLE: Record<InheritKey, string> = {
   brief: '🎯 Ý đồ chốt',
   draft: '📝 Bản nháp',
@@ -33,7 +19,8 @@ const KEY_TITLE: Record<InheritKey, string> = {
   adaptation: '🎬 Chuyển thể',
   director: '🎬 Quy hoạch đạo diễn',
   visual: '🎨 Hệ thị giác',
-  assets: '🧩 Nguyên liệu (@tag)'
+  assets: '🧩 Nguyên liệu (@tag)',
+  script: '📜 Kịch bản final'
 }
 
 export function InheritedDataView({ stage }: { stage: ChatGateStage }): JSX.Element | null {
@@ -42,8 +29,9 @@ export function InheritedDataView({ stage }: { stage: ChatGateStage }): JSX.Elem
   const visualSystem = useWizard((s) => s.visualSystem)
   const [open, setOpen] = useState(false)
 
-  const keys = INHERIT_KEYS[stage]
-  if (!keys || keys.length === 0) return null
+  // Cùng nguồn với backend (buildInheritedLedger) → panel này LUÔN khớp thứ thợ thật sự nhận.
+  const keys = inheritKeysFor(stage)
+  if (keys.length === 0) return null
 
   return (
     <div className="mt-4 rounded-xl border border-ink-800 bg-ink-950/40 text-sm">
@@ -89,6 +77,16 @@ function Empty({ children }: { children: ReactNode }): JSX.Element {
   return <span className="italic text-slate-600">{children}</span>
 }
 
+/**
+ * Chắn mảng: LLM đôi khi trả 1 CHUỖI/OBJECT ở chỗ đáng lẽ là mảng. Chuỗi vẫn có .length
+ * nên lọt guard `x.length > 0`, rồi .map/.sort nổ TypeError → sập cả panel "Kế thừa".
+ * Không phải mảng → trả [] (coi như chưa có dữ liệu) thay vì crash. Cùng tinh thần với
+ * toArr() ở StageOutputView.
+ */
+function arr<T>(v: T[] | null | undefined): T[] {
+  return Array.isArray(v) ? v : []
+}
+
 /** Render 1 artifact kế thừa thành nội dung gọn (đủ để đối chiếu, không phải bản đầy đủ). */
 function renderKey(
   k: InheritKey,
@@ -115,14 +113,14 @@ function renderKey(
     }
     case 'skeleton': {
       const sk = plan?.skeleton
-      if (!sk || (!sk.logline && (!sk.beats || sk.beats.length === 0)))
-        return <Empty>Chưa có khung xương.</Empty>
+      const beats = arr(sk?.beats)
+      if (!sk || (!sk.logline && beats.length === 0)) return <Empty>Chưa có khung xương.</Empty>
       return (
         <div className="space-y-0.5">
           {sk.logline && <p className="italic text-slate-300">“{sk.logline}”</p>}
-          {sk.beats?.length > 0 && (
+          {beats.length > 0 && (
             <p className="text-slate-500">
-              {sk.beats
+              {beats
                 .slice()
                 .sort((a, b) => a.order - b.order)
                 .map((b) => `${b.order}.${b.role}`)
@@ -141,13 +139,15 @@ function renderKey(
             Hướng: {ad.approach}
             {ad.tone && <span className="text-slate-500"> · tông {ad.tone}</span>}
           </p>
-          {ad.show_dont_tell?.length > 0 && (
+          {arr(ad.show_dont_tell).length > 0 && (
             <ul className="space-y-0.5">
-              {ad.show_dont_tell.slice(0, 3).map((s, i) => (
-                <li key={i}>• {s}</li>
-              ))}
-              {ad.show_dont_tell.length > 3 && (
-                <li className="text-slate-600">… +{ad.show_dont_tell.length - 3} nữa</li>
+              {arr(ad.show_dont_tell)
+                .slice(0, 3)
+                .map((s, i) => (
+                  <li key={i}>• {String(s)}</li>
+                ))}
+              {arr(ad.show_dont_tell).length > 3 && (
+                <li className="text-slate-600">… +{arr(ad.show_dont_tell).length - 3} nữa</li>
               )}
             </ul>
           )}
@@ -155,12 +155,12 @@ function renderKey(
       )
     }
     case 'director': {
-      const d = plan?.director
-      if (!d || d.scenes.length === 0) return <Empty>Chưa có quy hoạch đạo diễn.</Empty>
+      const scenes = arr(plan?.director?.scenes)
+      if (scenes.length === 0) return <Empty>Chưa có quy hoạch đạo diễn.</Empty>
       return (
         <p>
-          {d.scenes.length} cảnh ·{' '}
-          {d.scenes
+          {scenes.length} cảnh ·{' '}
+          {scenes
             .slice()
             .sort((a, b) => a.order - b.order)
             .map((s) => `C${s.order} ${s.emotion} ${s.emotion_intensity}/10`)
@@ -170,13 +170,14 @@ function renderKey(
     }
     case 'visual': {
       const vs = plan?.visualSystem ?? visual
-      if (!vs || (vs.color_script.length === 0 && !vs.lighting && !vs.texture))
+      const cs = arr(vs?.color_script)
+      if (!vs || (cs.length === 0 && !vs.lighting && !vs.texture))
         return <Empty>Chưa có hệ thị giác.</Empty>
       return (
         <div className="space-y-0.5">
-          {vs.color_script.length > 0 && (
+          {cs.length > 0 && (
             <p>
-              {vs.color_script
+              {cs
                 .slice()
                 .sort((a, b) => a.scene_order - b.scene_order)
                 .map((c) => `C${c.scene_order}:${c.palette}`)
@@ -188,12 +189,24 @@ function renderKey(
       )
     }
     case 'assets': {
-      if (assets.length === 0) return <Empty>Chưa có nguyên liệu.</Empty>
+      const list = arr(assets)
+      if (list.length === 0) return <Empty>Chưa có nguyên liệu.</Empty>
       return (
         <p>
-          {assets.map((a) => `@${a.tag}`).join(' ')}
-          <span className="text-slate-600"> ({assets.length} nguyên liệu)</span>
+          {list.map((a) => `@${a.tag}`).join(' ')}
+          <span className="text-slate-600"> ({list.length} nguyên liệu)</span>
         </p>
+      )
+    }
+    case 'script': {
+      // Narration final lưu trong bảng scenes (chưa expose ra renderer). Ở ĐÂY chỉ báo TRUNG THỰC
+      // rằng nó ĐƯỢC ĐẨY THẲNG vào thợ ở backend (buildInheritedLedger key='script') — không bịa
+      // nội dung giả. Toàn văn xem ở cột output/bản xuất; điều quan trọng: thợ LUÔN nhận được nó.
+      return (
+        <span className="text-slate-500">
+          Lời thoại chốt từng cảnh được <b className="text-slate-300">nạp thẳng cho thợ</b> ở bước
+          này (không phụ thuộc thợ tự gọi tool). Xem toàn văn ở cột kết quả bên phải.
+        </span>
       )
     }
     default:

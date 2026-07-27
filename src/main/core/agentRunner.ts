@@ -18,6 +18,7 @@ export interface RunAgentOptions {
   tools: ToolDef[] // nhóm tool được cấp cho thợ này
   ctx: ToolContext // buộc trong 1 dự án
   maxSteps?: number // trần vòng lặp chống loop vô hạn
+  maxTokens?: number // trần token MỖI lượt (mặc định 16384 — đủ cho lượt gọi NHIỀU tool song song, VD Final ghi 6 cảnh 1 lượt)
   temperature?: number
   cfg?: ModelConfig
   onStep?: (info: AgentStep) => void // callback tiến độ (stream ra UI sau)
@@ -113,6 +114,14 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
   let finalText = ''
   let step = 0
 
+  // ⭐ ĐẾM LỖI LẶP — chống thợ "dậm chân tại chỗ".
+  // Ca thật: tool trả `only.map is not a function`, thợ đoán nhầm là sai TÊN tool nên
+  // gọi lại y hệt ~40 lượt liền, cháy sạch maxSteps mà không ghi được block nào. LLM
+  // không tự nhận ra mình lặp vì mỗi lượt nó chỉ thấy 1 tool_result. Nên app phải nói
+  // thẳng vào mặt nó: "lỗi này lặp lần thứ N rồi, ĐỔI CÁCH ĐI".
+  const errStreak = new Map<string, number>()
+  let loopBreak = ''
+
   while (step < maxSteps) {
     step++
     // Mỗi lượt LLM đi qua hàng đợi 800ms + timeout/retry.
@@ -124,7 +133,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
         chatToolTurn(
           sanitized,
           toolSchemas,
-          { system: opts.system, temperature: opts.temperature, maxTokens: 4096 },
+          { system: opts.system, temperature: opts.temperature, maxTokens: opts.maxTokens ?? 16384 },
           cfg
         ),
       // Nhà cung cấp treo/chậm → hàng đợi tự thử lại: báo UI để không đứng câm ở "0 bước".
@@ -148,6 +157,28 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
     if (turn.text) {
       finalText = turn.text
       opts.onStep?.({ step, kind: 'text', detail: turn.text.slice(0, 200) })
+    }
+
+    // 🔎 CHẨN ĐOÁN: in mỗi lượt để biết vì sao thợ dừng sớm (stopReason + có tool nào không).
+    console.log(
+      `[AGENT] step=${step} stop=${turn.stopReason} tools=${turn.toolUses
+        .map((t) => t.name)
+        .join(',') || '(none)'} textLen=${turn.text?.length ?? 0}`
+    )
+
+    // ⚠️ Bị cắt vì HẾT TOKEN (max_tokens) — không phải "xong". Nếu đang giữa lúc gọi tool,
+    //    JSON input bị cụt → tool KHÔNG chạy được, im lặng thoát sẽ khiến người dùng tưởng
+    //    đã dựng mà thực ra chưa ghi gì. Báo lỗi rõ để UI hiện + người dùng biết đường xử lý.
+    if (turn.stopReason === 'max_tokens') {
+      const half = turn.toolUses.length > 0
+      throw new Error(
+        half
+          ? `Thợ bị CẮT vì chạm trần token khi đang gọi "${turn.toolUses
+              .map((t) => t.name)
+              .join(', ')}" (JSON dài quá 1 lượt). Đã nới trần lên ${opts.maxTokens ?? 16384}. ` +
+              `Hãy bấm "▶ Bắt đầu"/gửi lại; nếu vẫn cắt, nhắn thợ "chia nhỏ, ghi từng phần".`
+          : `Thợ bị CẮT vì chạm trần token khi đang soạn văn bản dài. Đã nới trần lên ${opts.maxTokens ?? 16384}. Hãy gửi lại.`
+      )
     }
 
     // Không còn yêu cầu tool → xong. Đẩy lượt assistant cuối vào lịch sử để lưu chat-gate.
@@ -187,8 +218,27 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
             ).slice(0, 400)}`
           )
         }
-        output = { error: msg }
+        // Đếm CHUỖI lỗi giống hệt (cùng tool + cùng thông báo). Kèm thẳng lời nhắc vào
+        // tool_result vì đó là thứ DUY NHẤT LLM đọc được ở lượt sau.
+        const key = `${use.name}::${msg}`
+        const n = (errStreak.get(key) ?? 0) + 1
+        errStreak.set(key, n)
+        output = {
+          error: msg,
+          ...(n >= 2
+            ? {
+                lap_lai: `Lỗi Y HỆT này đã xảy ra ${n} lần với tool "${use.name}". ĐỪNG gọi lại y như cũ và ĐỪNG đoán là sai tên tool — tên tool đúng thì handler mới chạy được để sinh ra lỗi này. Hãy ĐỔI CÁCH: đọc lại mô tả tool, sửa KIỂU DỮ LIỆU của tham số (số phải là số, danh sách phải là MẢNG chứ không phải chuỗi), hoặc bỏ qua tham số tùy chọn đang gây lỗi. Nếu sau 1 lần đổi cách vẫn lỗi thì DỪNG gọi tool và báo lại cho người dùng nguyên văn lỗi này.`
+              }
+            : {})
+        }
+        if (n >= 4) {
+          loopBreak =
+            `⛔ DỪNG SỚM: tool "${use.name}" báo lỗi y hệt ${n} lần liên tiếp — "${msg}".\n` +
+            `Thợ đang gọi lặp cùng một cách nên app cắt vòng lặp để khỏi cháy lượt vô ích.\n` +
+            `Việc đã ghi được trước đó vẫn giữ nguyên. Hãy gửi nguyên văn lỗi này cho người phát triển, hoặc nhắn lại yêu cầu để thợ thử cách khác.`
+        }
       }
+      if (!isError) errStreak.clear()
       toolCalls.push({ name: use.name, input: use.input, output })
       opts.onStep?.({
         step,
@@ -205,6 +255,13 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
 
     // Đẩy tool_result vào lịch sử, lặp tiếp
     messages.push({ role: 'user', content: toolResults })
+
+    // Cắt vòng lặp lỗi: thoát HẲN để trả lời người dùng, không im lặng chạy tiếp tới maxSteps.
+    if (loopBreak) {
+      finalText = loopBreak
+      opts.onStep?.({ step, kind: 'done', detail: 'Cắt vòng lặp: tool lỗi lặp lại' })
+      break
+    }
   }
 
   return { finalText, steps: step, toolCalls, messages }

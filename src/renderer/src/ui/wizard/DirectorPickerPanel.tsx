@@ -121,12 +121,14 @@ export function DirectorPickerPanel({
           <BibleRow label="Cảm xúc · gương mặt" value={bible.emotion_face} />
           <BibleRow label="Âm thanh" value={bible.sound_design} />
           <BibleRow label="Vật lý (Seedance)" value={bible.physics_notes} />
-          {bible.do_dont?.length > 0 && (
+          {/* Chắn mảng: LLM đôi khi trả CHUỖI ở chỗ đáng lẽ string[]; chuỗi vẫn có .length
+              nên lọt guard rồi .map nổ TypeError → sập cả panel. Không phải mảng → bỏ qua. */}
+          {Array.isArray(bible.do_dont) && bible.do_dont.length > 0 && (
             <div className="text-sm text-slate-300">
               <div className="text-slate-500">Nên / tránh:</div>
               <ul className="mt-1 space-y-1">
                 {bible.do_dont.map((d, i) => (
-                  <li key={i}>• {d}</li>
+                  <li key={i}>• {String(d)}</li>
                 ))}
               </ul>
             </div>

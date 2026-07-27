@@ -3,7 +3,14 @@
 // Mọi handler bọc kết quả trong IpcResult để không ném lỗi qua bridge.
 // ============================================================
 import { ipcMain } from 'electron'
-import type { CreateProjectInput, IpcResult, ProjectParams, AssetRole, Ideal } from '../shared/types'
+import type {
+  CreateProjectInput,
+  IpcResult,
+  ProjectParams,
+  AssetRole,
+  Ideal,
+  IdentityLock
+} from '../shared/types'
 import {
   createProject,
   listProjects,
@@ -18,7 +25,9 @@ import {
   updateProjectStage,
   getPlanArtifacts,
   listAssetsFull,
-  assetCoverage
+  assetCoverage,
+  saveIdentityLockByTag,
+  listBlockViews
 } from './db'
 import { chat, listModels } from './core/llmGateway'
 import { llmQueue } from './core/queue'
@@ -29,6 +38,7 @@ import { runGate0 } from './pipeline/gate0'
 import { runGate, reviewGate, buildExport, runPrep, runDirectorBrief } from './pipeline/gates'
 import { runGateChat, gateChatHistory, confirmGate } from './pipeline/gateChat'
 import { runOrchestrator } from './pipeline/orchestrator'
+import { readCharacterFromImages } from './pipeline/readCharacter'
 import {
   listAssetTags,
   createTag,
@@ -197,8 +207,10 @@ export function registerIpc(): void {
     'orchestrator:chat',
     async (e, projectId: number, message: string | null) => {
       try {
+        // Kênh RIÊNG 'orchestrator:step' — trước đây dùng chung 'gate:step' với cổng chat,
+        // nếu cả hai panel cùng mount thì log tiến độ lẫn vào nhau.
         const result = await runOrchestrator(projectId, message, (step) => {
-          e.sender.send('gate:step', step)
+          e.sender.send('orchestrator:step', step)
         })
         return ok(result)
       } catch (err) {
@@ -294,6 +306,47 @@ export function registerIpc(): void {
   ipcMain.handle('assets2:coverage', async (_e, projectId: number) => {
     try {
       return ok(assetCoverage(projectId))
+    } catch (err) {
+      return fail(err)
+    }
+  })
+
+  // ⭐ KHÓA MẶT bằng TAY từ UI — trước đây chỉ agent gọi được tool lock_identity, nên
+  // khi thợ quên khóa thì người dùng KHÔNG có đường nào tự sửa ngoài việc nhắn lại chat.
+  // Đây là nguyên nhân trực tiếp của ca "11 asset lock=NULL, 12 prompt ảnh không anchor".
+  ipcMain.handle(
+    'assets2:lock',
+    async (_e, projectId: number, tag: string, lock: Partial<IdentityLock>) => {
+      try {
+        saveIdentityLockByTag(projectId, tag, lock)
+        return ok(listAssetsFull(projectId))
+      } catch (err) {
+        return fail(err)
+      }
+    }
+  )
+
+  // ⭐ ĐỌC ẢNH tư liệu của 1 @tag → hồ sơ khóa mặt ĐỀ XUẤT (KHÔNG tự lưu).
+  // Cố ý không lưu thẳng: người dùng có thể đã gõ tay hồ sơ; ghi đè âm thầm là mất trắng.
+  // Kết quả đổ vào form để họ duyệt/sửa rồi mới bấm Lưu.
+  ipcMain.handle('assets2:readImage', async (_e, projectId: number, tag: string) => {
+    try {
+      const asset = listAssetsFull(projectId).find((a) => a.tag === tag)
+      if (!asset) throw new Error(`Không tìm thấy @${tag} trong dự án.`)
+      // Gộp ảnh gốc + ảnh biến thể: nhìn cả cụm thì model chốt được đặc điểm nào THẬT SỰ
+      // cố định (có ở mọi ảnh), thay vì bám vào một khoảnh khắc của một tấm.
+      const paths = [asset.ref_image_path, ...asset.derivatives.map((d) => d.ref_image_path)]
+      // Truyền role: sản phẩm cần bộ hướng dẫn tả BAO BÌ/NHÃN, không phải tả mặt người.
+      return ok(await readCharacterFromImages(paths, tag, asset.role))
+    } catch (err) {
+      return fail(err)
+    }
+  })
+
+  // ---- Block (shot) cho cột kết quả wizard: phân cảnh + prompt ảnh + prompt video ----
+  ipcMain.handle('blocks:list', async (_e, projectId: number) => {
+    try {
+      return ok(listBlockViews(projectId))
     } catch (err) {
       return fail(err)
     }

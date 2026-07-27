@@ -35,6 +35,8 @@ export function WizardView({ project }: { project: Project }): JSX.Element {
   const refreshActiveProject = useApp((s) => s.refreshActiveProject)
   const clearStage = useApp((s) => s.clearStage)
   const resetForProject = useWizard((s) => s.resetForProject)
+  const loadPlan = useWizard((s) => s.loadPlan)
+  const loadAssets = useWizard((s) => s.loadAssets)
   const wizardError = useWizard((s) => s.wizardError)
 
   const [step, setStep] = useState<StepKey>(() => stepFromStage(project.stage))
@@ -76,7 +78,14 @@ export function WizardView({ project }: { project: Project }): JSX.Element {
     const done = await clearStage(project.id, step, backStageFor(step))
     setRedoing(false)
     if (done) {
-      resetForProject() // xóa state chat tạm của bước
+      resetForProject() // xóa state chat tạm của bước (plan/assets/chats về rỗng)
+      // ⭐ resetForProject() vừa xóa TRẮNG plan/assetsFull TRONG BỘ NHỚ. clearStageOutputs ở
+      // backend CHỈ xóa output của ĐÚNG bước làm lại (VD gate3 chỉ null video_prompt_json) —
+      // data các bước TRƯỚC (kịch bản/nguyên liệu/khung xương…) VẪN CÒN NGUYÊN trong DB.
+      // Phải nạp lại từ DB, nếu không panel "Kế thừa" + cột output sẽ hiện "Chưa có..." oan
+      // (trông như mất data bước trước, thực ra chỉ store bị dọn mà chưa nạp lại).
+      void loadPlan(project.id)
+      void loadAssets(project.id)
       advance(step) // ở lại bước này, đã sạch để chạy lại
     }
   }

@@ -13,6 +13,23 @@ function isFiniteNumber(v: unknown): boolean {
   return typeof v === 'number' && Number.isFinite(v)
 }
 
+/**
+ * ⭐ ÉP SỐ (chống lỗi "thiếu scene_order" dù thợ ĐÃ gửi): nhiều LLM (qua 9router) trả số
+ * dạng CHUỖI — VD scene_order:"6" thay vì 6. Khi đó isFiniteNumber trượt → validator báo
+ * "thiếu" oan, thợ gửi lại vẫn chuỗi → lặp vô hạn (đúng lỗi user gặp ở GATE 3).
+ * Hàm này SỬA input tại chỗ: field nào là chuỗi số ("6", " 6 ", "6.0") → chuyển thành số 6.
+ * Chuỗi rỗng/không phải số → để nguyên cho validator báo lỗi thật. Gọi ĐẦU mỗi assert.
+ */
+function coerceNumericFields(obj: Record<string, unknown>, fields: string[]): void {
+  for (const f of fields) {
+    const v = obj[f]
+    if (typeof v === 'string' && v.trim() !== '') {
+      const n = Number(v)
+      if (Number.isFinite(n)) obj[f] = n
+    }
+  }
+}
+
 /** write_skeleton: logline không rỗng; beats mảng không rỗng; mỗi beat có order(số)/role/summary. */
 export function assertSkeleton(input: Record<string, unknown>): void {
   if (!isNonEmptyString(input.logline)) {
@@ -24,6 +41,7 @@ export function assertSkeleton(input: Record<string, unknown>): void {
   }
   beats.forEach((b, i) => {
     const beat = b as Record<string, unknown>
+    coerceNumericFields(beat, ['order'])
     if (!isFiniteNumber(beat.order)) {
       throw new Error(`write_skeleton: beat #${i + 1} thiếu "order" là SỐ thứ tự nhịp (1,2,3...).`)
     }
@@ -44,6 +62,7 @@ export function assertDirectorPlan(input: Record<string, unknown>): void {
   }
   scenes.forEach((s, i) => {
     const sc = s as Record<string, unknown>
+    coerceNumericFields(sc, ['order', 'line_count', 'char_count', 'emotion_intensity'])
     if (!isFiniteNumber(sc.order)) {
       throw new Error(`write_director_plan: cảnh #${i + 1} thiếu "order" là SỐ (= order_idx của cảnh).`)
     }
@@ -80,6 +99,7 @@ export function assertDirectorBible(input: Record<string, unknown>): void {
 
 /** write_video_prompt: đủ trường bắt buộc theo VideoPrompt (scene_order/block_order số; style/scene/motion không rỗng). */
 export function assertVideoPrompt(input: Record<string, unknown>): void {
+  coerceNumericFields(input, ['scene_order', 'block_order'])
   if (!isFiniteNumber(input.scene_order)) {
     throw new Error('write_video_prompt: thiếu "scene_order" là SỐ thứ tự cảnh.')
   }
@@ -99,6 +119,7 @@ export function assertVideoPrompt(input: Record<string, unknown>): void {
 
 /** plan_shots: scene_order số; shots mảng không rỗng; mỗi shot có block_order≥1 + shot_desc. */
 export function assertPlanShots(input: Record<string, unknown>): void {
+  coerceNumericFields(input, ['scene_order'])
   if (!isFiniteNumber(input.scene_order)) {
     throw new Error('plan_shots: thiếu "scene_order" là SỐ thứ tự cảnh.')
   }
@@ -108,6 +129,7 @@ export function assertPlanShots(input: Record<string, unknown>): void {
   }
   shots.forEach((sh, i) => {
     const shot = sh as Record<string, unknown>
+    coerceNumericFields(shot, ['block_order'])
     if (!isFiniteNumber(shot.block_order) || (shot.block_order as number) < 1) {
       throw new Error(`plan_shots: shot #${i + 1} "block_order" phải là SỐ ≥ 1.`)
     }
@@ -119,6 +141,7 @@ export function assertPlanShots(input: Record<string, unknown>): void {
 
 /** write_image_prompt: scene_order/block_order số; image_prompt_en không rỗng. */
 export function assertImagePrompt(input: Record<string, unknown>): void {
+  coerceNumericFields(input, ['scene_order', 'block_order'])
   if (!isFiniteNumber(input.scene_order)) {
     throw new Error('write_image_prompt: thiếu "scene_order" là SỐ thứ tự cảnh.')
   }
@@ -132,6 +155,7 @@ export function assertImagePrompt(input: Record<string, unknown>): void {
 
 /** write_shot_panel: scene_order số; blocks mảng không rỗng; mỗi block có block_order≥1 + shot_size/camera_angle/camera_move/subject/action_start/action_end + duration_sec là SỐ ≤8. */
 export function assertShotPanel(input: Record<string, unknown>): void {
+  coerceNumericFields(input, ['scene_order'])
   if (!isFiniteNumber(input.scene_order)) {
     throw new Error('write_shot_panel: thiếu "scene_order" là SỐ thứ tự cảnh.')
   }
@@ -142,6 +166,7 @@ export function assertShotPanel(input: Record<string, unknown>): void {
   blocks.forEach((b, i) => {
     const bl = b as Record<string, unknown>
     const at = `shot #${i + 1}`
+    coerceNumericFields(bl, ['block_order', 'duration_sec'])
     if (!isFiniteNumber(bl.block_order) || (bl.block_order as number) < 1) {
       throw new Error(`write_shot_panel: ${at} "block_order" phải là SỐ ≥ 1.`)
     }

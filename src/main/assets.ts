@@ -3,7 +3,7 @@
 // Chọn ảnh qua dialog → COPY vào userData/refs/<projectId>/ → lưu path vào asset.
 // Trả thumbnail dạng data URL để renderer hiển thị (không đọc file trực tiếp từ web).
 // ============================================================
-import { app, dialog, BrowserWindow } from 'electron'
+import { app, dialog, BrowserWindow, nativeImage } from 'electron'
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync, existsSync } from 'fs'
 import { join, extname, basename } from 'path'
 import {
@@ -133,6 +133,40 @@ export function readThumb(path: string | null): string | null {
     const mime = MIME[ext] ?? 'image/png'
     const b64 = readFileSync(path).toString('base64')
     return `data:${mime};base64,${b64}`
+  } catch {
+    return null
+  }
+}
+
+/**
+ * ⭐ Đọc ảnh → data URL ĐÃ THU NHỎ, dành cho việc GỬI LÊN MODEL (không phải hiển thị).
+ *
+ * Vì sao phải thu nhỏ chứ không xài lại readThumb: ảnh character-sheet Coco xuất ra
+ * thường 2–4K, base64 phồng thêm ~33% → dễ vượt trần 5MB/ảnh của API và tốn token vô ích.
+ * Anthropic tự co ảnh về cạnh dài ~1568px trước khi xử lý, nên gửi to hơn mức đó KHÔNG
+ * làm model nhìn rõ hơn — chỉ tốn tiền và thời gian truyền.
+ *
+ * Ép về JPEG chất lượng 88: sheet 4-view là ảnh chụp/vẽ nhiều màu, PNG ở cỡ này nặng gấp
+ * mấy lần mà không rõ hơn chút nào ở mức model đọc.
+ *
+ * Ảnh nhỏ hơn ngưỡng thì giữ nguyên (thu nhỏ ngược lên chỉ làm mờ).
+ */
+export function readImageForModel(path: string | null, maxEdge = 1400): string | null {
+  if (!path || !existsSync(path)) return null
+  try {
+    const img = nativeImage.createFromPath(path)
+    if (img.isEmpty()) return null
+    const { width, height } = img.getSize()
+    // Chỉ đặt MỘT cạnh, để nativeImage tự giữ tỉ lệ. Đặt cả hai là méo ảnh —
+    // sheet 4-view méo thì tỉ lệ đầu-thân model đọc ra cũng sai theo.
+    const out =
+      Math.max(width, height) > maxEdge
+        ? img.resize({
+            quality: 'good',
+            ...(width >= height ? { width: maxEdge } : { height: maxEdge })
+          })
+        : img
+    return `data:image/jpeg;base64,${out.toJPEG(88).toString('base64')}`
   } catch {
     return null
   }

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import type { AssetFull, AssetDerivative, AssetRole } from '@shared/types'
+import type { AssetFull, AssetDerivative, AssetRole, IdentityLock } from '@shared/types'
 import { useWizard } from '../../wizardStore'
 import { GateChatPanel } from './GateChatPanel'
 
@@ -38,6 +38,7 @@ export function AssetStudioPanel({
   const visualSystem = useWizard((s) => s.visualSystem)
   const loadAssets = useWizard((s) => s.loadAssets)
   const attachAssetImage = useWizard((s) => s.attachAssetImage)
+  const lockIdentity = useWizard((s) => s.lockIdentity)
 
   const [thumbs, setThumbs] = useState<Record<string, string | null>>({})
   const [busyTag, setBusyTag] = useState<string | null>(null)
@@ -119,10 +120,12 @@ export function AssetStudioPanel({
               {assetsFull.map((a) => (
                 <AssetCard
                   key={a.asset_id}
+                  projectId={projectId}
                   asset={a}
                   thumbs={thumbs}
                   busyTag={busyTag}
                   onAttach={attach}
+                  onLock={(lock) => lockIdentity(projectId, a.tag, lock)}
                 />
               ))}
             </div>
@@ -161,35 +164,99 @@ function CoverageBar({
           chưa gắn ảnh: {coverage.missingImage.map((t) => '@' + t).join(', ')}
         </span>
       )}
+      {/* ⭐ Khóa nhận dạng: hiện RIÊNG một dòng vì đây là thứ chặn chốt cổng và là nguyên
+          nhân số 1 gây trôi mặt — gộp chung dòng trên thì người dùng lướt qua không thấy.
+          Nói cả "mặt" lẫn "nhãn": danh sách này gồm cả nhân vật lẫn sản phẩm, mà chai sai
+          nhãn giữa các cảnh còn nặng hơn diễn viên trôi mặt. */}
+      <div className="w-full border-t border-ink-800 pt-1.5">
+        {coverage.missingIdentity.length > 0 ? (
+          <span className="text-rose-300">
+            🔓 CHƯA khóa nhận dạng: {coverage.missingIdentity.map((t) => '@' + t).join(', ')} — mặt
+            (nhân vật) và nhãn/dáng (sản phẩm) sẽ khác nhau giữa các cảnh. Bấm{' '}
+            <b className="text-rose-200">🔓 Khóa mặt / Khóa sản phẩm</b> ở thẻ tương ứng bên dưới.
+          </span>
+        ) : (
+          <span className="text-emerald-300">🔒 Đã khóa nhận dạng đủ nhân vật/sản phẩm</span>
+        )}
+      </div>
     </div>
   )
 }
 
 /** Thẻ 1 asset gốc + các biến thể phái sinh của nó. */
 function AssetCard({
+  projectId,
   asset,
   thumbs,
   busyTag,
-  onAttach
+  onAttach,
+  onLock
 }: {
+  projectId: number
   asset: AssetFull
   thumbs: Record<string, string | null>
   busyTag: string | null
   onAttach: (tag: string) => void
+  onLock: (lock: Partial<IdentityLock>) => Promise<boolean>
 }): JSX.Element {
   const meta = ROLE_META[asset.role] ?? ROLE_META.char
+  const [openLock, setOpenLock] = useState(false)
+  // Chỉ nhân vật/sản phẩm mới cần khóa nhận dạng — bối cảnh/đạo cụ khóa bằng prompt là đủ.
+  const needsLock = asset.role === 'char' || asset.role === 'product'
+  const isProduct = asset.role === 'product'
+  // Sản phẩm khóa BAO BÌ chứ không khóa mặt — gọi đúng tên để người dùng không tưởng
+  // nút này chỉ dành cho nhân vật rồi bỏ qua (chai sai nhãn còn nặng hơn trôi mặt).
+  const lockWord = isProduct ? 'khóa sản phẩm' : 'khóa mặt'
+  const locked = hasAnyLock(asset.identity_lock)
+
   return (
     <div className="card flex flex-col gap-3 p-3">
       <div className="flex items-center gap-2">
         <span className={'chip ' + meta.chip}>@{asset.tag}</span>
         <span className="text-[11px] text-slate-500">{meta.label}</span>
         <span className="truncate text-xs text-slate-400">{asset.name}</span>
-        {asset.source === 'auto' && (
+        {needsLock && (
+          <button
+            type="button"
+            onClick={() => setOpenLock((v) => !v)}
+            title={
+              locked
+                ? 'Đã khóa nhận dạng — bấm để xem/sửa hồ sơ gốc'
+                : isProduct
+                  ? 'CHƯA khóa — nhãn/dáng sản phẩm sẽ khác nhau giữa các cảnh. Bấm để khóa.'
+                  : 'CHƯA khóa — ảnh sẽ ra mặt khác nhau giữa các cảnh. Bấm để khóa.'
+            }
+            className={
+              'ml-auto shrink-0 rounded border px-2 py-0.5 text-[11px] transition ' +
+              (locked
+                ? 'border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10'
+                : 'border-rose-500/40 text-rose-300 hover:bg-rose-500/10')
+            }
+          >
+            {locked ? `🔒 Đã ${lockWord}` : `🔓 ${lockWord[0].toUpperCase() + lockWord.slice(1)}`}
+          </button>
+        )}
+        {asset.source === 'auto' && !needsLock && (
           <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wide text-slate-600">
             tách tự động
           </span>
         )}
       </div>
+
+      {openLock && needsLock && (
+        <IdentityLockForm
+          projectId={projectId}
+          tag={asset.tag}
+          role={asset.role}
+          initial={asset.identity_lock}
+          // Ảnh gốc HOẶC ảnh biến thể đều đọc được → nút "Đọc ảnh" sáng khi có bất kỳ tấm nào.
+          hasImage={Boolean(
+            asset.ref_image_path || asset.derivatives.some((d) => d.ref_image_path)
+          )}
+          onSave={onLock}
+          onClose={() => setOpenLock(false)}
+        />
+      )}
 
       <PromptRow
         tag={asset.tag}
@@ -215,6 +282,372 @@ function AssetCard({
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+/** Đã khóa gì chưa (mirror hasLock ở shared/anchor — renderer không import main). */
+function hasAnyLock(lock: IdentityLock | null | undefined): boolean {
+  if (!lock) return false
+  // ⚠️ CHỈ tính tầng ẢNH (bỏ f.dyn) — phải khớp hasLock ở shared/anchor.ts. Nếu tính cả
+  // ô "giọng"/"dáng điệu" thì điền mỗi giọng cũng báo ✅ đã khóa mặt, trong khi khối
+  // [IDENTITY LOCK] vẫn rỗng và ảnh vẫn trôi mặt — đúng kiểu "sạch giả" đã vá ở cổng.
+  return LOCK_FIELDS.some((f) => !f.dyn && lock[f.key]?.trim())
+}
+
+/**
+ * Các ô của hồ sơ gốc, chia 2 tầng.
+ *
+ * **Tầng ẢNH** — thứ tự KHỚP anchorLine (ANCHOR_ORDER trong shared/anchor.ts) để người
+ * dùng thấy đúng thứ tự chữ sẽ được ghép vào prompt. Đổi thứ tự ở đây mà quên đổi bên kia
+ * thì form hiển thị một đằng, prompt ghép một nẻo.
+ *
+ * **Tầng ĐỘNG** (`dyn: true`) — KHÔNG vào prompt ảnh, chỉ dùng ở cổng video/voiceover.
+ * Ảnh tĩnh không có dáng đi và giọng nói; nhét vào chỉ làm prompt phình và loãng tín hiệu.
+ *
+ * Placeholder viết TIẾNG ANH vì khối anchor đi thẳng vào prompt ảnh tiếng Anh.
+ */
+const LOCK_FIELDS: Array<{
+  key: keyof IdentityLock
+  label: string
+  ph: string
+  dyn?: boolean
+  hint?: string
+}> = [
+  { key: 'age', label: 'Tuổi', ph: '26' },
+  { key: 'face', label: 'Khuôn mặt · da', ph: 'Oval face, warm tan skin' },
+  {
+    key: 'features',
+    label: 'Ngũ quan',
+    ph: 'Single-fold almond eyes, straight nose bridge, thin lips'
+  },
+  {
+    key: 'signature',
+    label: '⭐ Dấu nhận diện',
+    ph: 'Small mole below outer corner of left eye, scar through right eyebrow',
+    hint: 'Nốt ruồi · sẹo · tàn nhang · xăm · răng khểnh. Ghim mặt MẠNH NHẤT — ưu tiên điền. Không có thì bỏ trống, đừng bịa.'
+  },
+  { key: 'hair', label: 'Tóc (mặc định)', ph: 'Black hair, shoulder-length, center part' },
+  { key: 'body', label: 'Vóc dáng', ph: 'Athletic build, 7.5-head proportion, 1m65' },
+  {
+    key: 'wardrobe',
+    label: 'Trang phục ký hiệu',
+    ph: 'Round tortoiseshell glasses, teal brand hoodie',
+    hint: '⚠️ CHỈ điền khi nhân vật mặc CÙNG bộ xuyên suốt phim (mascot/KOL/đồng phục). Phim đổi đồ theo cảnh → BỎ TRỐNG, không thì chống nhau với bối cảnh từng cảnh.'
+  },
+  { key: 'aura', label: 'Khí chất', ph: 'Quiet stubborn intensity' },
+  {
+    key: 'demeanor',
+    label: '🎬 Dáng điệu · cử chỉ',
+    ph: 'Long unhurried strides, tilts head left when listening',
+    dyn: true,
+    hint: 'Chỉ dùng ở cổng Video (không vào prompt ảnh) — giữ mọi block cùng một dáng đi.'
+  },
+  {
+    key: 'voice',
+    label: '🎙️ Giọng',
+    ph: 'Low warm alto, unhurried pacing, soft Southern accent',
+    dyn: true,
+    hint: 'Chỉ dùng cho voiceover/lip-sync (không vào prompt ảnh).'
+  }
+]
+
+/**
+ * ⭐ NHÃN RIÊNG CHO SẢN PHẨM — cùng `key`, khác cách gọi.
+ *
+ * Vì sao ĐÈ NHÃN chứ không đẻ bộ ô mới: khối [IDENTITY LOCK] ghép theo ANCHOR_ORDER cố
+ * định trong shared/anchor.ts; thêm khóa lạ sẽ bị lọc bỏ, đổi thứ tự thì 2 lần ghép ra 2
+ * chuỗi khác nhau — đúng thứ cả cơ chế này sinh ra để chống. Nên vẫn 8 ô đó, chỉ đổi NGHĨA.
+ *
+ * Vì sao cần: "Ngũ quan · Tóc · Vóc dáng" đọc lên chẳng ăn nhập gì với một chai nước;
+ * để nguyên là dụ người dùng điền bừa hoặc bỏ trống ô quan trọng nhất (chi tiết nhãn).
+ *
+ * `hide: true` = ô vô nghĩa với vật thể (tuổi/tóc/trang phục) → ẩn hẳn khỏi form.
+ */
+const PRODUCT_FIELD_OVERRIDE: Partial<
+  Record<keyof IdentityLock, { label?: string; ph?: string; hint?: string; hide?: true }>
+> = {
+  age: { hide: true },
+  hair: { hide: true },
+  wardrobe: { hide: true },
+  face: {
+    label: 'Thân · vỏ · chất liệu',
+    ph: 'Slim cylindrical aluminium can, matte teal body, satin finish',
+    hint: 'Hình dáng bao bì + chất liệu + độ bóng. Kèm nắp/nút nếu có.'
+  },
+  features: {
+    label: '⭐ Chi tiết nhãn',
+    ph: 'Coconut-leaf logo centered upper third, white bold sans wordmark below, gold band at base',
+    hint: 'Ô QUAN TRỌNG NHẤT với sản phẩm. Bố cục logo · kiểu chữ · dải màu theo thứ tự trên-xuống · màu nắp. Nói rõ màu gì, nằm ĐÂU.'
+  },
+  signature: {
+    label: '⭐ Dấu thương hiệu',
+    ph: 'Embossed coconut-leaf emblem, matte black cap',
+    hint: 'Thứ nhìn phát nhận ra ngay: logo, khía dáng riêng, họa tiết dập nổi, màu nắp đặc trưng. Không đọc rõ thì bỏ trống, đừng đoán tên thương hiệu.'
+  },
+  body: {
+    label: 'Tỉ lệ · dung tích',
+    ph: '330ml, roughly 2.4:1 height-to-width, straight sides, slight shoulder taper',
+    hint: 'Cao/mập bao nhiêu, dung tích. Sai tỉ lệ là chai ra méo giữa các cảnh.'
+  },
+  aura: {
+    label: 'Cảm giác thương hiệu',
+    ph: 'Clean tropical freshness, premium but approachable',
+    hint: 'Tinh thần bao bì toát ra. CẤM nêu tên thương hiệu có thật khác.'
+  }
+}
+
+/**
+ * Bộ ô hiển thị cho 1 vai. Sản phẩm dùng nhãn đè + ẩn ô vô nghĩa; các vai khác giữ nguyên.
+ * Thứ tự LUÔN theo LOCK_FIELDS để form khớp thứ tự chữ sẽ ghép vào prompt.
+ */
+function fieldsFor(role: AssetRole): typeof LOCK_FIELDS {
+  if (role !== 'product') return LOCK_FIELDS
+  const out: typeof LOCK_FIELDS = []
+  for (const f of LOCK_FIELDS) {
+    const ov = PRODUCT_FIELD_OVERRIDE[f.key]
+    if (ov?.hide) continue
+    out.push(ov ? { ...f, ...ov } : f)
+  }
+  return out
+}
+
+/** 1 ô của form khóa mặt. Tách riêng vì `hint` khiến markup dài, lặp 2 lần thì rối. */
+function LockField({
+  field,
+  value,
+  highlight,
+  onChange
+}: {
+  field: (typeof LOCK_FIELDS)[number]
+  value: string
+  /** Ô này vừa được ĐỌC TỪ ẢNH điền → tô viền để người dùng biết chỗ cần soát. */
+  highlight?: boolean
+  onChange: (v: string) => void
+}): JSX.Element {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-[10px] uppercase tracking-wide text-slate-500">
+        {field.label}
+        {highlight && <span className="ml-1 normal-case text-sky-300">· từ ảnh</span>}
+      </span>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={field.ph}
+        className={'input w-full text-xs' + (highlight ? ' border-sky-500/50' : '')}
+      />
+      {field.hint ? (
+        <span className="text-[10px] leading-snug text-slate-600">{field.hint}</span>
+      ) : null}
+    </label>
+  )
+}
+
+/**
+ * ⭐ FORM KHÓA MẶT — đường tự phục vụ, không phải nhắn agent.
+ * Vì sao cần: trước đây chỉ tool lock_identity (agent gọi) mới ghi được hồ sơ gốc. Thợ
+ * quên là người dùng kẹt — đúng ca 11/11 asset lock=NULL. Giờ tự điền được ngay tại thẻ.
+ */
+function IdentityLockForm({
+  projectId,
+  tag,
+  role,
+  initial,
+  hasImage,
+  onSave,
+  onClose
+}: {
+  projectId: number
+  tag: string
+  role: AssetRole
+  initial: IdentityLock | null | undefined
+  hasImage: boolean
+  onSave: (lock: Partial<IdentityLock>) => Promise<boolean>
+  onClose: () => void
+}): JSX.Element {
+  const isProduct = role === 'product'
+  // Bộ ô HIỂN THỊ đổi theo vai; `form` vẫn giữ đủ 8 khóa để không nuốt mất dữ liệu cũ
+  // (asset từng là nhân vật rồi đổi vai vẫn còn nguyên chữ đã lưu).
+  const fields = fieldsFor(role)
+  const imgFieldCount = fields.filter((f) => !f.dyn).length
+  const [form, setForm] = useState<Record<string, string>>(() =>
+    Object.fromEntries(LOCK_FIELDS.map((f) => [f.key, initial?.[f.key] ?? '']))
+  )
+  const [saving, setSaving] = useState(false)
+  const [reading, setReading] = useState(false)
+  /** Kết quả đọc ảnh: ghi chú của model + lỗi. null = chưa đọc lần nào. */
+  const [readInfo, setReadInfo] = useState<{ notes: string; count: number } | null>(null)
+  const [readErr, setReadErr] = useState<string | null>(null)
+  /** Các ô vừa được ảnh điền — tô viền để người dùng biết chỗ nào cần soát lại. */
+  const [fromImage, setFromImage] = useState<Set<string>>(new Set())
+  // Đếm RIÊNG tầng ảnh ĐANG HIỆN: đó mới là thứ quyết định khóa được hay không.
+  // Đếm theo `fields` chứ không LOCK_FIELDS — nếu không, sản phẩm còn sót chữ ở ô đã ẩn
+  // (tuổi/tóc) sẽ được tính là "đã điền" trong khi người dùng không hề thấy ô đó.
+  const filled = fields.filter((f) => !f.dyn && form[f.key]?.trim()).length
+
+  /**
+   * ⭐ Đọc ảnh → điền form. KHÔNG lưu — người dùng soát rồi mới bấm Lưu.
+   *
+   * Ghi đè cả ô đang có chữ (có chủ đích): người dùng chủ động bấm nút này nghĩa là họ
+   * muốn lấy theo ảnh. Không mất gì vĩnh viễn vì chưa chạm DB — đóng form không lưu là xong.
+   */
+  async function readFromImage(): Promise<void> {
+    setReading(true)
+    setReadErr(null)
+    const res = await window.danh.assets2.readImage(projectId, tag)
+    setReading(false)
+    if (!res.ok) {
+      setReadErr(res.error)
+      return
+    }
+    const { lock, notes, imageCount } = res.data
+    const touched = new Set<string>()
+    setForm((s) => {
+      const next = { ...s }
+      for (const [k, v] of Object.entries(lock)) {
+        if (typeof v === 'string' && v.trim()) {
+          next[k] = v.trim()
+          touched.add(k)
+        }
+      }
+      return next
+    })
+    setFromImage(touched)
+    setReadInfo({ notes, count: imageCount })
+  }
+
+  async function save(): Promise<void> {
+    setSaving(true)
+    const okSaved = await onSave(form as Partial<IdentityLock>)
+    setSaving(false)
+    if (okSaved) onClose()
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded border border-amber-500/25 bg-amber-500/[0.04] p-3">
+      <div className="text-[11px] leading-relaxed text-slate-400">
+        <b className="text-amber-soft">Hồ sơ gốc @{tag}</b> — app ghép các ô{' '}
+        <b className="text-slate-300">tầng ảnh</b> thành khối{' '}
+        <code className="text-slate-300">[IDENTITY LOCK]</code> và chèn NGUYÊN VĂN vào đầu{' '}
+        <b className="text-slate-300">mọi</b> prompt ảnh. Vì app ghép nên 16 block giống nhau đến
+        từng ký tự. Viết <b className="text-slate-300">tiếng Anh</b>, cụ thể, chỉ tả đặc điểm{' '}
+        <b className="text-slate-300">CỐ ĐỊNH</b>{' '}
+        {isProduct ? (
+          <>
+            (không tả ánh sáng, giọt nước, tay cầm — đó là lớp mềm đổi theo cảnh).
+            <div className="mt-1 text-emerald-200/70">
+              Đây là <b>sản phẩm</b>: tả <b>bao bì</b>, không tả người. Nhãn sai màu hay logo lệch
+              chỗ giữa các cảnh là hàng của khách bị vẽ sai — nặng hơn cả trôi mặt diễn viên.
+            </div>
+          </>
+        ) : (
+          <>(không tả biểu cảm — đó là lớp mềm đổi theo cảnh).</>
+        )}
+      </div>
+
+      {/* ⭐ Đọc ảnh: đường NHANH NHẤT để có hồ sơ đúng — model nhìn chính ảnh sẽ dùng làm
+          tham chiếu, nên chữ và ảnh không còn nói hai đằng. */}
+      <div className="flex flex-wrap items-center gap-2 rounded border border-ink-800 bg-ink-950/40 p-2">
+        <button
+          type="button"
+          onClick={() => void readFromImage()}
+          disabled={reading || !hasImage}
+          title={
+            hasImage
+              ? 'Gửi ảnh tư liệu của @tag này cho model đọc rồi điền sẵn các ô bên dưới'
+              : 'Chưa có ảnh — bấm “Upload ảnh” ở dưới trước đã'
+          }
+          className="btn-ghost px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {reading
+            ? '👁 Đang đọc ảnh…'
+            : isProduct
+              ? '👁 Đọc ảnh → tả bao bì'
+              : '👁 Đọc ảnh → điền hồ sơ'}
+        </button>
+        <span className="text-[10px] leading-snug text-slate-500">
+          {hasImage
+            ? isProduct
+              ? 'Model nhìn ảnh bao bì rồi tả nhãn/dáng/tỉ lệ. Bạn soát/sửa rồi mới bấm Lưu — app không tự lưu.'
+              : 'Model nhìn ảnh bạn upload rồi điền sẵn. Bạn soát/sửa rồi mới bấm Lưu — app không tự lưu.'
+            : 'Chưa có ảnh cho @tag này. Upload ảnh ở phần dưới thẻ rồi quay lại.'}
+        </span>
+      </div>
+
+      {readErr && (
+        <div className="rounded border border-rose-500/30 bg-rose-500/5 p-2 text-[11px] text-rose-200">
+          Đọc ảnh hỏng: {readErr}
+        </div>
+      )}
+      {readInfo && (
+        <div className="rounded border border-sky-500/25 bg-sky-500/5 p-2 text-[11px] leading-relaxed text-sky-100/80">
+          Đã đọc <b>{readInfo.count}</b> ảnh — các ô{' '}
+          <b className="text-sky-200">viền xanh</b> là do ảnh điền,{' '}
+          <b className="text-sky-200">hãy soát lại trước khi lưu</b>. Ô để trống nghĩa là ảnh
+          không cho thấy rõ (model được dặn thà bỏ trống còn hơn bịa).
+          {readInfo.notes && <div className="mt-1 text-slate-400">Ghi chú: {readInfo.notes}</div>}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {fields
+          .filter((f) => !f.dyn)
+          .map((f) => (
+            <LockField
+              key={f.key}
+              field={f}
+              value={form[f.key] ?? ''}
+              highlight={fromImage.has(f.key)}
+              onChange={(v) => setForm((s) => ({ ...s, [f.key]: v }))}
+            />
+          ))}
+      </div>
+
+      {/* Tầng ĐỘNG tách hẳn ra: 2 ô này KHÔNG vào prompt ảnh. Để chung lưới trên thì
+          người dùng tưởng điền vào là mặt được khóa chặt hơn — không phải.
+          Ẩn với SẢN PHẨM: một cái chai không có dáng đi và giọng nói. */}
+      {!isProduct && (
+        <div className="flex flex-col gap-2 border-t border-ink-800 pt-2">
+          <div className="text-[11px] text-slate-500">
+            <b className="text-slate-400">Tầng động</b> — <b className="text-slate-400">không</b>{' '}
+            vào prompt ảnh. Chỉ hiện ở cổng <b className="text-slate-400">Video</b> để mọi block
+            cùng một dáng đi, một chất giọng. Bỏ trống cũng được.
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {fields
+              .filter((f) => f.dyn)
+              .map((f) => (
+                <LockField
+                  key={f.key}
+                  field={f}
+                  value={form[f.key] ?? ''}
+                  onChange={(v) => setForm((s) => ({ ...s, [f.key]: v }))}
+                />
+              ))}
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => void save()}
+          disabled={saving || filled === 0}
+          className="btn-primary px-3 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {saving ? 'Đang lưu…' : isProduct ? '🔒 Lưu khóa sản phẩm' : '🔒 Lưu khóa mặt'}
+        </button>
+        <button type="button" onClick={onClose} className="btn-ghost px-3 py-1 text-xs">
+          Đóng
+        </button>
+        <span className="text-[11px] text-slate-500">
+          {filled}/{imgFieldCount} ô tầng ảnh — điền ít nhất{' '}
+          <b className="text-slate-400">
+            {isProduct ? 'chi tiết nhãn + dấu thương hiệu + tỉ lệ' : 'khuôn mặt + ngũ quan + vóc dáng'}
+          </b>
+        </span>
+      </div>
     </div>
   )
 }
@@ -342,16 +775,19 @@ function VisualSystemView({
 }: {
   vs: import('@shared/types').VisualSystem | null
 }): JSX.Element | null {
-  if (!vs || (vs.color_script.length === 0 && !vs.lighting && !vs.texture)) return null
+  // Model đôi khi trả color_script sai kiểu (không phải mảng) → .slice().sort() nổ,
+  // sập cả Wizard. Ép về mảng an toàn trước khi dùng.
+  const colorScript = Array.isArray(vs?.color_script) ? vs.color_script : []
+  if (!vs || (colorScript.length === 0 && !vs.lighting && !vs.texture)) return null
   return (
     <div className="card space-y-3 p-4">
       <div className="text-xs font-semibold uppercase tracking-wide text-amber-glow/80">
         🎨 Hệ thị giác · Color Script
       </div>
       {vs.palette_note && <p className="text-xs text-slate-400">{vs.palette_note}</p>}
-      {vs.color_script.length > 0 && (
+      {colorScript.length > 0 && (
         <div className="space-y-1">
-          {vs.color_script
+          {colorScript
             .slice()
             .sort((a, b) => a.scene_order - b.scene_order)
             .map((c) => (

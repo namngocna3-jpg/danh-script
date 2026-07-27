@@ -15,9 +15,35 @@ export interface ModelConfig {
   apiKey: string
 }
 
+/**
+ * Một khối nội dung trong 1 lượt chat. Cho phép ẢNH để model NHÌN được ảnh tư liệu
+ * người dùng upload (đọc ngoại hình nhân vật → điền hồ sơ khóa mặt).
+ *
+ * `data` là base64 THUẦN (không kèm tiền tố `data:image/png;base64,`) — Anthropic đòi
+ * vậy; dùng `dataUrlToImageBlock()` để tách cho đúng.
+ */
+export type ContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
-  content: string
+  /**
+   * Chuỗi (đa số ca) HOẶC mảng khối khi cần gửi kèm ảnh.
+   * Giữ `string` để mọi chỗ gọi cũ không phải sửa.
+   */
+  content: string | ContentBlock[]
+}
+
+/**
+ * Đổi data URL (thứ `readThumb()` trả về) → khối ảnh Anthropic.
+ * Trả null nếu chuỗi không phải data URL ảnh — chỗ gọi tự bỏ qua thay vì gửi rác lên API.
+ */
+export function dataUrlToImageBlock(dataUrl: string | null | undefined): ContentBlock | null {
+  if (!dataUrl) return null
+  const m = /^data:(image\/[a-z+]+);base64,(.+)$/i.exec(dataUrl.trim())
+  if (!m) return null
+  return { type: 'image', source: { type: 'base64', media_type: m[1], data: m[2] } }
 }
 
 export interface ChatOptions {
@@ -82,6 +108,46 @@ export async function chat(
   }
   // 9router / beeknoee: giả định tương thích OpenAI Chat Completions
   return chatOpenAICompatible(messages, opts, cfg)
+}
+
+/**
+ * ⭐ GỌI MODEL KÈM ẢNH (đọc ảnh tư liệu nhân vật → mô tả ngoại hình).
+ *
+ * Vì sao KHÔNG dùng `chat()`: `chat()` đẩy provider ngoài anthropic sang endpoint
+ * OpenAI `/chat/completions`, mà khối ảnh của OpenAI có hình dạng KHÁC (image_url)
+ * — gửi khối Anthropic sang đó là lỗi 400. Hàm này luôn đi `/v1/messages`; cổng gom
+ * (9router/beeknoee) cũng phơi endpoint tương thích Anthropic nên dùng chung được.
+ *
+ * Không stream: một lượt đọc ảnh ra vài trăm chữ, chờ trọn gói đơn giản hơn nhiều.
+ */
+export async function chatVision(
+  blocks: ContentBlock[],
+  opts: ChatOptions = {},
+  cfg: ModelConfig = defaultConfig()
+): Promise<string> {
+  if (!cfg.apiKey) {
+    throw new Error('Chưa cấu hình API key. Đặt DS_API_KEY (hoặc ANTHROPIC_API_KEY).')
+  }
+  const res = await fetchWithTimeout(messagesUrl(cfg.baseUrl), {
+    method: 'POST',
+    headers: anthropicHeaders(cfg),
+    body: JSON.stringify({
+      model: cfg.modelName,
+      max_tokens: opts.maxTokens ?? 2048,
+      temperature: opts.temperature ?? 0.2,
+      stream: false,
+      ...(opts.system ? { system: opts.system } : {}),
+      messages: [{ role: 'user', content: blocks }]
+    })
+  })
+  if (!res.ok) throw httpError(cfg.provider, res.status, await res.text())
+  const { raw, streamedText } = await readModelResponse(res)
+  if (streamedText !== null) return streamedText
+  const json = raw as { content?: Array<{ type: string; text?: string }> }
+  return (json.content ?? [])
+    .filter((c) => c.type === 'text')
+    .map((c) => c.text ?? '')
+    .join('')
 }
 
 /**
@@ -412,8 +478,9 @@ async function chatAnthropic(
   opts: ChatOptions,
   cfg: ModelConfig
 ): Promise<string> {
-  const system =
-    opts.system ?? messages.find((m) => m.role === 'system')?.content
+  // `content` giờ có thể là mảng khối → system chỉ nhận chuỗi, bỏ qua ca mảng.
+  const sysMsg = messages.find((m) => m.role === 'system')?.content
+  const system = opts.system ?? (typeof sysMsg === 'string' ? sysMsg : undefined)
   const turns = messages
     .filter((m) => m.role !== 'system')
     .map((m) => ({ role: m.role, content: m.content }))

@@ -5,17 +5,21 @@
 //   2) resources/skills ← bản gói (đọc-only, trong extraResources)
 //   3) <appPath>/skills, cwd/skills ← khi chạy dev
 // seedSkills() copy resources → userData lần chạy đầu để người dùng sửa .md tại chỗ.
+// ⚠️ userData ĐÈ bản gói khi đọc → nếu chỉ copy "file còn thiếu" thì bản skill mới
+// của app KHÔNG BAO GIỜ tới được máy đã chạy 1 lần. Xem seedSkills() bên dưới.
 // ============================================================
 import { app } from 'electron'
 import {
   readFileSync,
+  writeFileSync,
   existsSync,
   readdirSync,
   mkdirSync,
   copyFileSync,
   statSync
 } from 'fs'
-import { join, dirname } from 'path'
+import { createHash } from 'crypto'
+import { join, dirname, relative } from 'path'
 import { getProject } from '../db'
 
 /** Thư mục skills SỬA ĐƯỢC (trong userData). Ưu tiên số 1 khi đọc. */
@@ -43,35 +47,111 @@ export function skillsRoot(): string {
   return bundledSkillsDir()
 }
 
-/** Copy đệ quy 1 thư mục (chỉ copy file còn thiếu ở đích — không đè bản người dùng sửa). */
-function copyDirIfMissing(src: string, dst: string): void {
-  if (!existsSync(src)) return
-  mkdirSync(dst, { recursive: true })
-  for (const name of readdirSync(src)) {
-    const s = join(src, name)
-    const d = join(dst, name)
-    if (statSync(s).isDirectory()) {
-      copyDirIfMissing(s, d)
-    } else if (!existsSync(d)) {
-      mkdirSync(dirname(d), { recursive: true })
-      copyFileSync(s, d)
-    }
+/** Tên file ghi dấu vân tay bản gói đã seed (nằm trong userData/skills). */
+const SEED_MANIFEST = '.seed-manifest.json'
+
+function sha1(buf: Buffer | string): string {
+  return createHash('sha1').update(buf).digest('hex')
+}
+
+function fileHash(p: string): string {
+  try {
+    return sha1(readFileSync(p))
+  } catch {
+    return ''
   }
 }
 
+/** Liệt kê đệ quy mọi file trong 1 thư mục, trả đường dẫn TƯƠNG ĐỐI so với root. */
+function listFilesRel(root: string, dir = root, out: string[] = []): string[] {
+  if (!existsSync(dir)) return out
+  for (const name of readdirSync(dir)) {
+    const s = join(dir, name)
+    if (statSync(s).isDirectory()) listFilesRel(root, s, out)
+    else out.push(relative(root, s).replace(/\\/g, '/'))
+  }
+  return out
+}
+
 /**
- * Seed skills từ bản gói sang userData/skills lần chạy đầu.
- * - Lần đầu: copy toàn bộ → người dùng sửa .md tại userData được.
- * - Lần sau (nâng cấp app): chỉ copy file MỚI còn thiếu, KHÔNG đè file người dùng đã sửa.
- * Gọi 1 lần lúc app.whenReady (trước khi chạy gate).
+ * Seed skills từ bản gói sang userData/skills.
+ *
+ * ⚠️ VÌ SAO PHẢI PHỨC TẠP: skillsRoot() ưu tiên userData → nếu chỉ copy "file còn thiếu"
+ * thì mọi bản skill CẢI TIẾN của app sau này KHÔNG BAO GIỜ tới được máy đã chạy 1 lần
+ * (file cũ ở userData che mất file mới). Bug này từng khiến 3 file _execution_* sửa rồi
+ * mà app vẫn chạy bản cũ.
+ *
+ * Quy tắc mới — 3 chiều, KHÔNG BAO GIỜ mất dữ liệu:
+ *  1. Đích chưa có          → copy.
+ *  2. Bản gói KHÔNG đổi     → giữ nguyên đích (kể cả người dùng đã sửa).
+ *  3. Bản gói ĐỔI:
+ *     · đích vẫn y hệt bản seed trước (người dùng chưa sửa) → ĐÈ bằng bản mới.
+ *     · đích đã bị sửa tay                                  → GIỮ bản người dùng,
+ *       ghi bản mới ra cạnh nó dưới tên `<tên>.moi.md` để đối chiếu thủ công.
+ * Vân tay bản gói lưu ở userData/skills/.seed-manifest.json.
  */
 export function seedSkills(): void {
   try {
     const bundled = bundledSkillsDir()
     const user = userSkillsDir()
-    // relative rỗng nghĩa là cùng thư mục (dev chạy thẳng skills/) → khỏi seed
+    // trùng thư mục nghĩa là dev chạy thẳng skills/ → khỏi seed
     if (bundled === user) return
-    copyDirIfMissing(bundled, user)
+    if (!existsSync(bundled)) return
+    mkdirSync(user, { recursive: true })
+
+    const manifestPath = join(user, SEED_MANIFEST)
+    let manifest: Record<string, string> = {}
+    try {
+      manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as Record<string, string>
+    } catch {
+      manifest = {}
+    }
+
+    for (const rel of listFilesRel(bundled)) {
+      if (rel === SEED_MANIFEST) continue
+      const src = join(bundled, rel)
+      const dst = join(user, rel)
+      const srcHash = fileHash(src)
+
+      if (!existsSync(dst)) {
+        mkdirSync(dirname(dst), { recursive: true })
+        copyFileSync(src, dst)
+        manifest[rel] = srcHash
+        continue
+      }
+
+      const dstHash = fileHash(dst)
+      if (dstHash === srcHash) {
+        manifest[rel] = srcHash // đã trùng, chỉ cập nhật dấu vân tay
+        continue
+      }
+
+      const seeded = manifest[rel]
+      if (seeded === undefined || dstHash === seeded) {
+        // Người dùng CHƯA sửa (hoặc chưa từng có manifest) → nhận bản mới của app.
+        // Vẫn giữ 1 bản sao phòng hờ trước khi đè.
+        try {
+          copyFileSync(dst, `${dst}.bak`)
+        } catch {
+          /* không sao lưu được thì vẫn tiếp tục */
+        }
+        copyFileSync(src, dst)
+        manifest[rel] = srcHash
+      } else {
+        // Người dùng ĐÃ sửa tay → tuyệt đối không đè, chỉ đặt bản mới cạnh bên.
+        try {
+          writeFileSync(`${dst}.moi.md`, readFileSync(src))
+        } catch {
+          /* bỏ qua */
+        }
+      }
+    }
+
+    try {
+      writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8')
+    } catch {
+      /* không ghi được manifest thì lần sau seed lại theo nhánh "chưa sửa" */
+    }
   } catch {
     /* seed lỗi thì vẫn đọc trực tiếp từ bản gói (skillsRoot fallback) */
   }

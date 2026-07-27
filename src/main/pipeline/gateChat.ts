@@ -16,6 +16,7 @@ import { toolsFor } from '../tools'
 import { workerSpec } from './workerSpecs'
 import { availableCraftFor, availableSkillsPrompt } from '../core/craftRegistry'
 import { extractTags, checkTagsExist } from './tagGuard'
+import { buildAnchorBlock, buildDynamicBlock, hasLock } from '../../shared/anchor'
 import {
   getProject,
   loadGateChat,
@@ -27,8 +28,11 @@ import {
   listBlocks,
   latestReviews,
   getPlanArtifacts,
-  listAssetsFull
+  listAssetsFull,
+  identityDriftReport,
+  videoDriftReport
 } from '../db'
+import { inheritKeysFor } from '../../shared/wizardSteps'
 
 /** Đặc tả 1 cổng hội thoại. */
 interface ChatGateSpec {
@@ -118,6 +122,7 @@ const CHAT_GATES: Record<string, ChatGateSpec> = {
       'read_script_full',
       'read_asset_coverage',
       'derive_assets',
+      'lock_identity', // ⭐ khóa mặt — TRƯỚC ĐÂY THIẾU, khiến 100% asset để NULL → trôi mặt
       'write_asset_prompt',
       'save_derived_asset',
       'write_visual_system'
@@ -128,10 +133,18 @@ const CHAT_GATES: Record<string, ChatGateSpec> = {
       'CẤM bịa nhân vật/bối cảnh/đạo cụ KHÔNG có trong kịch bản; thiếu tiền đề thì báo, không tự chế. Sau đó chào ngắn. ' +
       'Làm TUẦN TỰ:\n' +
       '① derive_assets — TÁCH nguyên liệu TỪ kịch bản (nhân vật/bối cảnh/đạo cụ lặp lại), KHÔNG bịa thứ kịch bản không có.\n' +
-      '② write_asset_prompt cho MỖI asset gốc — sinh PROMPT tạo ảnh: nhân vật = character sheet 4-view (nền #F8F4E8, mặt mộc, khai báo tỉ lệ đầu-thân); bối cảnh = 1 ảnh establishing SẠCH, MỘT góc đại diện, KHÔNG người, 16:9 (nhiều góc/địa điểm → tách asset scene riêng hoặc derivative angle, KHÔNG ghép nhiều góc trong 1 ảnh); đạo cụ = lưới 2×2.\n' +
+      '①bis ⭐ lock_identity cho MỌI asset char + product — BƯỚC QUAN TRỌNG NHẤT CỦA CỔNG NÀY. ' +
+      'Ghi HỒ SƠ GỐC 6 mục bằng TIẾNG ANH: face (hình mặt/da/nét nhận diện) · features (ngũ quan chi tiết: mắt/mí/mũi/môi/gò má) · ' +
+      'hair (màu-dài-kiểu-ngôi) · body (tỉ lệ đầu-thân/thể trạng/tư thế) · age (tuổi cụ thể) · aura (khí chất, ngôn ngữ so sánh trừu tượng). ' +
+      'Tả CỤ THỂ ĐO ĐẾM ĐƯỢC, CẤM chung chung ("đẹp", "cuốn hút") và CẤM tên người thật. ' +
+      'Kịch bản không tả mặt thì bạn TỰ QUYẾT một hồ sơ hợp vai rồi khóa lại — thà chốt một phương án còn hơn để trống, ' +
+      'vì để trống thì mỗi block sẽ ra một khuôn mặt khác nhau. App sẽ chèn khối này vào 100% prompt ảnh về sau. ' +
+      '⚠️ TỐI ĐA 3 asset/lượt, lượt sau ghi tiếp.\n' +
+      '② write_asset_prompt cho MỖI asset gốc — sinh PROMPT tạo ảnh: nhân vật = character sheet 4-view (nền #F8F4E8, mặt mộc, khai báo tỉ lệ đầu-thân); bối cảnh = 1 ảnh establishing SẠCH, MỘT góc đại diện, KHÔNG người, 16:9 (nhiều góc/địa điểm → tách asset scene riêng hoặc derivative angle, KHÔNG ghép nhiều góc trong 1 ảnh); đạo cụ = lưới 2×2. ⚠️ GHI THEO ĐỢT: mỗi lượt write_asset_prompt cho TỐI ĐA 3 asset rồi lượt sau tự ghi tiếp — CẤM dồn tất cả vào 1 lượt (prompt dài quá 16k token sẽ bị cắt).\n' +
       '③ save_derived_asset cho biến thể cần thiết (nhân vật: biến thể trang phục/trạng thái; bối cảnh: thời gian/thời tiết/góc; đạo cụ KHÔNG phái sinh) — mỗi asset 1–5 biến thể, "thà thiếu còn hơn thừa".\n' +
       '④ write_visual_system — Color Script (tone màu từng cảnh) + ánh sáng + chất liệu toàn phim.\n' +
-      'Người dùng sẽ copy prompt sang Coco tạo ảnh rồi upload về — nên prompt phải đủ để tạo ảnh ngay. Cuối cùng gọi read_asset_coverage để soát asset nào còn thiếu prompt.'
+      'Người dùng sẽ copy prompt sang Coco tạo ảnh rồi upload về — nên prompt phải đủ để tạo ảnh ngay. ' +
+      'Cuối cùng gọi read_asset_coverage để soát: missingIdentity PHẢI RỖNG (còn tag nào là còn nguy cơ trôi mặt → khóa nốt rồi soát lại), sau đó mới tới missingPrompt.'
   },
   // ── PHÂN CẢNH (shot_panel) — chia cảnh thành shot + điền khối phân cảnh ──
   gate_storyboard: {
@@ -142,22 +155,33 @@ const CHAT_GATES: Record<string, ChatGateSpec> = {
       'Người dùng vừa mở cổng PHÂN CẢNH. BƯỚC 0 (đọc-trước-khi-làm): đọc read_plan (khung xương/chuyển thể/đạo diễn/hệ thị giác) + read_script_full (toàn văn narration) + read_scenes (bối cảnh riêng cảnh) + read_assets (@tag đã có). ' +
       'CẤM bịa nhân vật/bối cảnh/đạo cụ không có trong kịch bản; @tag phải trỏ asset CÓ THẬT. Sau đó chào ngắn. ' +
       'Rồi với MỖI cảnh (order_idx tăng dần) → chia 1..n shot; mỗi shot điền khối phân cảnh: shot_size · camera_angle · camera_move · subject(@tag) · action_start→action_end (+1 chi tiết vật lý, cấm động từ mơ hồ) · duration_sec ≤8 · asset_tags. ' +
-      'Ghi qua write_shot_panel(scene_order, blocks[]) cho từng cảnh. Hỏi nếu còn phân vân số shot 1 cảnh.'
+      'Ghi qua write_shot_panel(scene_order, blocks[]) cho từng cảnh. ⚠️ GHI THEO ĐỢT: mỗi lượt ghi TỐI ĐA 2 cảnh rồi lượt sau tự ghi tiếp — CẤM dồn tất cả cảnh vào 1 lượt (nhiều cảnh × nhiều shot sẽ vượt 16k token và bị cắt). Hỏi nếu còn phân vân số shot 1 cảnh.'
   },
   gate2_image: {
     worker: 'imgPrompter',
-    tools: [...READ_TOOLS, 'read_coverage', 'save_asset', 'write_image_prompt'],
+    // ⭐ check_identity_drift: tự soát tả-chồng-ngoại-hình (lá chắn #3 chống trôi mặt)
+    tools: [
+      ...READ_TOOLS,
+      'read_coverage',
+      'save_asset',
+      'write_image_prompt',
+      'check_identity_drift'
+    ],
     layers: workerSpec('imgPrompter').layers,
     kickoff:
       'Người dùng vừa mở cổng PROMPT ẢNH. BƯỚC 0 (đọc-trước-khi-làm): đọc read_ideal + read_plan (hệ thị giác/Color Script) + read_scenes + read_blocks (KHỐI PHÂN CẢNH shot_panel: cỡ cảnh/góc/camera/Start→End/@tag đã dựng ở bước Phân cảnh) + read_assets (@tag đã có). ' +
       'CẤM bịa asset/@tag không có trong sổ — chỉ nhúng @tag đã tồn tại; thiếu tiền đề thì báo. Sau đó chào ngắn, ' +
       'rồi dựng prompt ảnh khung đầu (tiếng Anh, 3 đoạn, nhúng @tag) cho MỖI block đã có shot_desc. ' +
       'Bám KHỐI PHÂN CẢNH (shot_panel) của mỗi block — KHÔNG bịa lại cỡ cảnh/góc/hành động. ' +
-      'Cuối cùng gọi read_coverage để chắc KHÔNG block nào thiếu ảnh. Hỏi nếu còn điểm chưa rõ.'
+      '⚠️ GHI THEO ĐỢT (BẮT BUỘC, chống cắt token): mỗi lượt gọi write_image_prompt cho TỐI ĐA 3 block — đừng dồn tất cả block vào 1 lượt (JSON dài quá 16k token sẽ bị cắt, mất trắng). ' +
+      'Ghi xong 3 block thì lượt tiếp theo tự viết 3 block kế (KHÔNG chờ người dùng gõ "tiếp", KHÔNG dừng hỏi) — cứ thế tới khi MỌI block có prompt. ' +
+      '⭐ KHÓA MẶT: khối [IDENTITY LOCK] do APP TỰ CHÈN vào đầu mỗi prompt — bạn TUYỆT ĐỐI KHÔNG tả lại mặt/ngũ quan/tóc/tuổi/da/vóc dáng của @tag bằng lời của mình (tả chồng = model chọn bừa = mặt trôi). Chỉ viết phần MỀM: hành động · biểu cảm/ánh mắt · trang phục theo cảnh · bối cảnh · ánh sáng · style. ' +
+      'Cuối cùng gọi read_coverage (không block nào thiếu ảnh) VÀ check_identity_drift (soát tả-chồng-ngoại-hình) — còn lỗi thì xóa cụm bị bắt và ghi lại block đó. Hỏi nếu còn điểm chưa rõ.'
   },
   gate3_video: {
     worker: 'vidPrompter',
-    tools: [...READ_TOOLS, 'read_coverage', 'write_video_prompt'],
+    // ⭐ check_video_drift: soát tả-lại-ngoại-hình trong scene/motion (lá chắn #3 bản video)
+    tools: [...READ_TOOLS, 'read_coverage', 'write_video_prompt', 'check_video_drift'],
     layers: workerSpec('vidPrompter').layers,
     kickoff:
       'Người dùng vừa mở cổng PROMPT VIDEO. BƯỚC 0 (đọc-trước-khi-làm): đọc ideal + read_blocks (KHỐI PHÂN CẢNH shot_panel: camera_move/shot_size/action_start→action_end + image_prompt_en đã có prompt ẢNH KHUNG ĐẦU GATE 2) + @tag (read_assets); CẤM bịa block/asset không có trong sổ. ' +
@@ -166,7 +190,9 @@ const CHAT_GATES: Record<string, ChatGateSpec> = {
       'MOTION bám action_start→action_end trong shot_panel; camera bám camera_move/shot_size đã chốt. ' +
       'MULTI-SHOT (mọi thể loại): block được 1–3 shot (CUT-by-CUT) cắt bằng "Cut to"/"Lens switch to", mỗi shot khóa lại @tag để không drift; MOTION tả tư thế START→END + chi tiết vật lý (cấm động từ mơ hồ); CONSTRAINTS thêm câu "preserve @tag face and outfit exactly, 100% matches the reference" + 1 positive lock riêng block (danh tính @tag + vị trí + số lượng). ' +
       'Chào ngắn rồi dựng prompt video (STYLE/SCENE/MOTION/AUDIO/CONSTRAINTS + TEXT_OVERLAY nếu cần) cho MỖI block. ' +
-      'Cuối cùng gọi read_coverage để chắc KHÔNG block nào thiếu video. Hỏi nếu chưa rõ.'
+      '⚠️ GHI THEO ĐỢT (BẮT BUỘC, chống cắt token): mỗi lượt gọi write_video_prompt cho TỐI ĐA 3 block — đừng bao giờ dồn tất cả block vào 1 lượt (JSON dài quá 16k token sẽ bị cắt, mất trắng). ' +
+      'Ghi xong 3 block thì lượt tiếp THEO tự viết 3 block kế (KHÔNG chờ người dùng gõ "tiếp", KHÔNG dừng lại hỏi) — cứ thế cho tới khi MỌI block có prompt. ' +
+      'Cuối cùng gọi read_coverage (không block nào thiếu video) VÀ check_video_drift (soát tả-lại-ngoại-hình trong scene/motion) — còn lỗi thì xóa cụm bị bắt và ghi lại block đó. Hỏi nếu chưa rõ.'
   }
 }
 
@@ -174,19 +200,8 @@ export interface GateChatReply {
   reply: string
 }
 
-/** Mỗi cổng kế thừa artifact nào của các bước TRƯỚC (bơm THẲNG vào system, không chờ worker gọi read_plan). */
-const INHERIT_MAP: Record<string, InheritKey[]> = {
-  gate0_ideal: ['draft'],
-  gate1b_skeleton: ['brief', 'draft'],
-  gate1c_adaptation: ['brief', 'draft', 'skeleton'],
-  gate1d_script: ['brief', 'draft', 'skeleton', 'adaptation'],
-  gate_director: ['skeleton', 'adaptation'],
-  gate_assets: ['skeleton', 'adaptation', 'director', 'visual'],
-  gate_storyboard: ['skeleton', 'adaptation', 'director', 'assets'],
-  gate2_image: ['visual', 'assets'],
-  gate3_video: ['assets']
-}
-type InheritKey = 'brief' | 'draft' | 'skeleton' | 'adaptation' | 'director' | 'visual' | 'assets'
+// Bản đồ kế thừa dùng chung với renderer — xem inheritKeysFor ở @shared/wizardSteps.
+// (Trước đây chép tay 2 nơi nên UI dễ lệch với thứ thợ thật sự nhận.)
 
 /**
  * Dựng "SỔ CÁI BƯỚC TRƯỚC" (tiếng Việt gọn) từ DB — chèn vào system prompt MỖI lượt.
@@ -199,8 +214,8 @@ function buildInheritedLedger(projectId: number, gateStage: string): string {
   // (VD gate1a_draft): là kim chỉ nam thẩm mỹ xuyên suốt, đọc DB tươi mỗi lượt.
   const directorBlock = directorSystemBlock(projectId)
 
-  const keys = INHERIT_MAP[gateStage]
-  if (!keys || keys.length === 0) return directorBlock
+  const keys = inheritKeysFor(gateStage)
+  if (keys.length === 0) return directorBlock
   const plan = getPlanArtifacts(projectId)
   const out: string[] = []
 
@@ -250,11 +265,13 @@ function buildInheritedLedger(projectId: number, gateStage: string): string {
       )
     } else if (k === 'visual' && plan.visualSystem) {
       const vs = plan.visualSystem
-      if (vs.color_script.length || vs.lighting || vs.texture) {
+      // Phòng dữ liệu cũ lưu color_script sai kiểu (không phải mảng) → .slice().sort() nổ.
+      const colorScript = Array.isArray(vs.color_script) ? vs.color_script : []
+      if (colorScript.length || vs.lighting || vs.texture) {
         out.push(
           `## HỆ THỊ GIÁC\n` +
-            (vs.color_script.length
-              ? `Color Script: ${vs.color_script
+            (colorScript.length
+              ? `Color Script: ${colorScript
                   .slice()
                   .sort((a, b) => a.scene_order - b.scene_order)
                   .map((c) => `C${c.scene_order}:${c.palette}`)
@@ -267,28 +284,66 @@ function buildInheritedLedger(projectId: number, gateStage: string): string {
     } else if (k === 'assets') {
       const assets = listAssetsFull(projectId)
       if (assets.length) {
+        // ⭐ KHỐI ANCHOR — app GHÉP sẵn, thợ COPY NGUYÊN VĂN vào đầu prompt (không diễn giải lại).
+        // Đây là thứ giữ 16 block cùng một khuôn mặt. Ghép ở đây để thợ THẤY chính xác chuỗi
+        // sẽ được dùng; write_image_prompt còn chèn lại lần nữa như chốt chặn cuối.
+        const anchor = buildAnchorBlock(assets)
+        const dynamicBlock = buildDynamicBlock(assets)
+
+        // ⚠️ Asset chưa khóa mặt: TRƯỚC ĐÂY im lặng — sổ cái vẫn tuyên bố "KHÓA CỨNG" trong khi
+        // bên dưới trống rỗng, thợ buộc phải bịa ngoại hình mỗi block một kiểu. Giờ KÊU TO.
+        const unlocked = assets
+          .filter((a) => (a.role === 'char' || a.role === 'product') && !hasLock(a.identity_lock))
+          .map((a) => `@${a.tag}`)
+
         out.push(
           `## NGUYÊN LIỆU (@tag CÓ THẬT — chỉ nhúng tag trong danh sách này)\n` +
-            `> KHÓA CỨNG dưới đây = ngoại hình đã chốt ở bước Nguyên liệu. BÁM Y NGUYÊN mọi block để nhân vật/sản phẩm KHÔNG trôi mặt/đổi hình. CẤM bịa lại ngoại hình khác.\n` +
             assets
               .map((a) => {
                 const derivs = a.derivatives.length
                   ? ` [biến thể: ${a.derivatives.map((d) => `@${d.tag}`).join(', ')}]`
                   : ''
-                // Ngoại hình khóa cứng: ưu tiên identity_lock (mặt/dáng), bù thêm tóm tắt gen_prompt gốc.
-                const lockParts: string[] = []
-                if (a.identity_lock?.face?.trim())
-                  lockParts.push(`mặt/nơi chốn: ${a.identity_lock.face.trim()}`)
-                if (a.identity_lock?.body?.trim())
-                  lockParts.push(`dáng: ${a.identity_lock.body.trim()}`)
-                const lock = lockParts.length ? `\n   ↳ KHÓA CỨNG — ${lockParts.join('; ')}` : ''
+                const lockMark = hasLock(a.identity_lock) ? ' ✅đã khóa' : ''
                 const genHint =
-                  !lockParts.length && a.gen_prompt?.trim()
+                  !hasLock(a.identity_lock) && a.gen_prompt?.trim()
                     ? `\n   ↳ Ngoại hình gốc (bám sát): ${a.gen_prompt.trim().slice(0, 240)}`
                     : ''
-                return `@${a.tag} (${a.role}): ${a.name}${derivs}${lock}${genHint}`
+                return `@${a.tag} (${a.role}): ${a.name}${derivs}${lockMark}${genHint}`
               })
-              .join('\n')
+              .join('\n') +
+            (anchor
+              ? `\n\n### HỒ SƠ GỐC BẤT BIẾN — COPY NGUYÊN VĂN, CẤM VIẾT LẠI\n` +
+                `> Mỗi prompt ảnh PHẢI mở đầu bằng ĐÚNG khối dưới đây (chỉ giữ dòng của @tag block đó dùng), ` +
+                `rồi mới tới bối cảnh/hành động/phong cách. KHÔNG diễn giải, KHÔNG rút gọn, KHÔNG đổi từ — ` +
+                `sai một chữ là mặt trôi. Sau khối này CẤM tả lại mặt/ngũ quan/dáng bằng lời của bạn.\n\n` +
+                anchor
+              : '') +
+            // ⭐ Hồ sơ ĐỘNG chỉ có nghĩa ở cổng video (ảnh tĩnh không có dáng đi/giọng nói).
+            // Bơm ở cổng ảnh chỉ tổ làm thợ tưởng phải tả vào prompt → phình prompt, loãng tín hiệu.
+            (gateStage === 'gate3_video' && dynamicBlock ? `\n\n${dynamicBlock}` : '') +
+            (unlocked.length
+              ? `\n\n⚠️ CHƯA KHÓA NHẬN DẠNG: ${unlocked.join(', ')} — chưa có hồ sơ gốc. ` +
+                `Nếu bạn đang ở cổng Nguyên liệu: gọi lock_identity NGAY cho các tag này. ` +
+                `Nếu ở cổng sau: BÁO người dùng quay lại bước Nguyên liệu để khóa, ` +
+                `và trong lúc chờ hãy dùng ĐÚNG MỘT mô tả ngoại hình cho tag đó ở TẤT CẢ block (tự nhất quán).`
+              : '')
+        )
+      }
+    } else if (k === 'script') {
+      // KỊCH BẢN FINAL (narration chốt) — ĐẨY THẲNG vào worker, KHÔNG để phụ thuộc worker
+      // có chịu gọi read_script_full hay không. Đây là NGUỒN SỰ THẬT các bước sau (đạo diễn/
+      // nguyên liệu/phân cảnh) bám vào — thiếu nó thì worker dễ bịa lời thoại/hành động.
+      // Đọc DB tươi mỗi lượt ⇒ sửa 1 cảnh ở bước trước thì bước sau nhận narration mới.
+      const scenes = listScenes(projectId).filter((s) => (s.narration_vi ?? '').trim())
+      if (scenes.length) {
+        out.push(
+          `## KỊCH BẢN FINAL (narration chốt — BÁM Y NGUYÊN lời thoại/mạch từng cảnh, KHÔNG viết lại)\n` +
+            scenes
+              .map((s) => {
+                const ctx = s.summary?.trim() ? ` — ${s.summary.trim()}` : ''
+                return `[Cảnh ${s.order_idx}${ctx}]\n${(s.narration_vi ?? '').trim()}`
+              })
+              .join('\n\n')
         )
       }
     }
@@ -506,6 +561,16 @@ export function confirmGate(projectId: number, gateStage: string, force = false)
         'Chưa thể chốt cổng — chưa có nguyên liệu nào. Hãy nhắn agent "tách nguyên liệu từ kịch bản" trước.'
       )
     }
+    // ⭐ CHẶN SỐ 1 — thiếu khóa nhận dạng là nguyên nhân gốc gây TRÔI MẶT ở bước prompt ảnh.
+    // Chặn ở ĐÂY (chứ không ở cổng ảnh) vì đây là nơi duy nhất còn sửa được rẻ: khóa xong
+    // thì 100% prompt sau tự bám theo. Qua cổng rồi mới phát hiện thì phải viết lại cả 16 block.
+    if (cov.missingIdentity.length) {
+      throw new Error(
+        `Chưa thể chốt cổng — còn nhân vật/sản phẩm CHƯA KHÓA NHẬN DẠNG: ${cov.missingIdentity.join(', ')}\n` +
+          `Đây là nguyên nhân số 1 khiến ảnh/video ra MẶT KHÁC NHAU giữa các cảnh.\n` +
+          `Hãy nhắn agent: "khóa nhận dạng cho các nhân vật còn thiếu" rồi chốt lại.`
+      )
+    }
     if (cov.missingPrompt.length) {
       throw new Error(
         `Chưa thể chốt cổng — còn asset THIẾU prompt sinh ảnh: ${cov.missingPrompt.join(', ')}\n` +
@@ -547,6 +612,63 @@ export function confirmGate(projectId: number, gateStage: string, force = false)
       console.warn(
         `[danh-script] confirmGate ${gateStage}: @tag mồ côi (không có asset): ${[...orphanTags].join(', ')}`
       )
+    }
+    // ⭐ Lá chắn #3 chống TRÔI MẶT: bắt prompt tả CHỒNG ngoại hình lên khối anchor.
+    // CHẶN CỨNG lỗi `error` ở cổng ẢNH — đây là nơi cuối còn sửa rẻ (qua cổng rồi thì
+    // prompt video đã kế thừa mô tả sai). Cảnh video không soát (prompt video khác cấu trúc).
+    if (need === 'image') {
+      const drift = identityDriftReport(projectId)
+      // ⭐ CHẶN "SẠCH GIẢ": đã viết prompt ảnh mà CHƯA asset nào khóa nhận dạng thì
+      // soát drift luôn trả rỗng (không có hồ sơ gốc để đối chiếu) → báo cáo trông đạt
+      // nhưng thực tế 100% prompt đi ra KHÔNG có khối [IDENTITY LOCK] (anchor_applied
+      // = false ở mọi block) → chắc chắn trôi mặt. Đây đúng ca người dùng vừa gặp.
+      if (drift.checked > 0 && drift.locked_tags.length === 0) {
+        problems.push(
+          `TRÔI MẶT (nặng) — ${drift.checked} prompt ảnh đã viết nhưng CHƯA nhân vật/sản phẩm nào được khóa nhận dạng` +
+            `${drift.unlocked_tags.length ? `: ${drift.unlocked_tags.join(', ')}` : ''}.\n` +
+            `    Không có hồ sơ gốc thì app không chèn được khối [IDENTITY LOCK] — mọi prompt ra mặt khác nhau.\n` +
+            `    Sửa: quay lại cổng Nguyên liệu, nhắn agent "khóa nhận dạng cho các nhân vật còn thiếu", ` +
+            `rồi về cổng này nhắn "ghi lại toàn bộ prompt ảnh" để anchor được chèn.`
+        )
+      }
+      const bad = drift.blocks
+        .map((b) => ({ ...b, errs: b.issues.filter((i) => i.level === 'error') }))
+        .filter((b) => b.errs.length)
+      if (bad.length) {
+        problems.push(
+          `TRÔI MẶT — ${bad.length} block tả chồng ngoại hình lên khối [IDENTITY LOCK]:\n` +
+            bad
+              .map(
+                (b) =>
+                  `    ${b.scene_order}.${b.block_order}: ${b.errs.map((e) => `${e.code} → "${e.hint}"`).join(' | ')}`
+              )
+              .join('\n') +
+            `\n    Sửa: nhắn agent "chạy check_identity_drift rồi xóa mô tả ngoại hình chồng lấn, ghi lại các block đó".`
+        )
+      }
+    }
+
+    // ⭐ Lá chắn #3 phiên bản VIDEO: prompt video tả lại ngoại hình = bảo model VẼ LẠI mặt
+    // thay vì bám ảnh first-frame đã khóa → phí công khóa mặt ở bước ảnh. Không đòi anchor
+    // (video lấy danh tính từ ảnh, không từ chữ) — chỉ bắt phần tả chồng.
+    if (need === 'video') {
+      const vd = videoDriftReport(projectId)
+      const bad = vd.blocks
+        .map((b) => ({ ...b, errs: b.issues.filter((i) => i.level === 'error') }))
+        .filter((b) => b.errs.length)
+      if (bad.length) {
+        problems.push(
+          `TRÔI MẶT (video) — ${bad.length} block tả lại ngoại hình nhân vật trong scene/motion:\n` +
+            bad
+              .map(
+                (b) =>
+                  `    ${b.scene_order}.${b.block_order}: ${b.errs.map((e) => `${e.code} → "${e.hint}"`).join(' | ')}`
+              )
+              .join('\n') +
+            `\n    Video bám mặt từ ẢNH đầu vào — tả lại ngoại hình bằng chữ là ép model vẽ mặt mới.\n` +
+            `    Sửa: nhắn agent "xóa mô tả ngoại hình trong scene/motion, chỉ giữ hành động · camera · ánh sáng, ghi lại các block đó".`
+        )
+      }
     }
     if (problems.length) {
       throw new Error(

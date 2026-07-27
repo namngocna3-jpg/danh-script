@@ -21,7 +21,8 @@ import type {
   PlanArtifacts,
   AssetFull,
   AssetCoverage,
-  VisualSystem
+  VisualSystem,
+  BlockView
 } from '@shared/types'
 
 /**
@@ -108,6 +109,10 @@ interface WizardState {
   coverage: AssetCoverage | null
   visualSystem: VisualSystem | null
 
+  // ⭐ Tầng BLOCK (shot): phân cảnh + prompt ảnh + prompt video — để cột kết quả GATE 2/3
+  // hiện THẲNG trong app, không phải Xuất bản mới xem được.
+  blocks: BlockView[]
+
   loadStyles: () => Promise<void>
   loadGenres: () => Promise<void>
   loadDirectors: () => Promise<void>
@@ -126,8 +131,16 @@ interface WizardState {
   sendAuto: (projectId: number, message: string | null) => Promise<void>
   loadPlan: (projectId: number) => Promise<void>
   loadAssets: (projectId: number) => Promise<void>
+  loadBlocks: (projectId: number) => Promise<void>
   attachAssetImage: (projectId: number, tag: string) => Promise<void>
+  /** ⭐ Khóa mặt bằng TAY cho 1 @tag (không cần nhắn agent). */
+  lockIdentity: (
+    projectId: number,
+    tag: string,
+    lock: Partial<import('@shared/types').IdentityLock>
+  ) => Promise<boolean>
   clearError: () => void
+  clearSteps: () => void
   resetForProject: () => void
 }
 
@@ -153,6 +166,7 @@ export const useWizard = create<WizardState>((set, get) => ({
   assetsFull: [],
   coverage: null,
   visualSystem: null,
+  blocks: [],
 
   resetForProject() {
     set({
@@ -173,7 +187,8 @@ export const useWizard = create<WizardState>((set, get) => ({
       plan: null,
       assetsFull: [],
       coverage: null,
-      visualSystem: null
+      visualSystem: null,
+      blocks: []
     })
   },
 
@@ -326,12 +341,18 @@ export const useWizard = create<WizardState>((set, get) => ({
           },
           chatBusy: null
         }))
-        // Bước kịch bản vừa chạy → khung xương/chiến lược có thể đã đổi, nạp lại để hiển thị.
-        if (PLAN_STAGES.has(stage)) void get().loadPlan(projectId)
+        // LUÔN nạp lại plan sau mỗi lượt chat: bước kịch bản có thể vừa đổi khung xương/
+        // chiến lược; các cổng sau (đạo diễn/nguyên liệu) vừa ghi director/visual_system vào
+        // plan_artifacts. Nạp lại để cột output + panel "Kế thừa" phản chiếu ngay. loadPlan
+        // chỉ đọc DB (rẻ) nên gọi mọi cổng là an toàn.
+        void get().loadPlan(projectId)
         // Cổng nguyên liệu vừa chạy → asset/prompt/Color Script có thể đã đổi, nạp lại.
         if (stage === 'gate_assets') void get().loadAssets(projectId)
         // Cổng phân cảnh vừa chạy → block/shot_panel + độ phủ block đã đổi, nạp lại.
         if (stage === 'gate_storyboard') void get().loadAssets(projectId)
+        // ⭐ 3 cổng sinh/sửa block → nạp lại block để cột kết quả hiện prompt NGAY sau lượt chat.
+        if (stage === 'gate_storyboard' || stage === 'gate2_image' || stage === 'gate3_video')
+          void get().loadBlocks(projectId)
       } else {
         set({ wizardError: res.error, chatBusy: null })
       }
@@ -360,11 +381,31 @@ export const useWizard = create<WizardState>((set, get) => ({
     })
   },
 
+  // ---- Tầng BLOCK (phân cảnh / prompt ảnh / prompt video) ----
+
+  async loadBlocks(projectId) {
+    const res = await window.danh.blocks.list(projectId)
+    // Lỗi thì giữ nguyên danh sách cũ thay vì xóa trắng — tránh cảm giác "mất dữ liệu".
+    if (res.ok) set({ blocks: res.data })
+  },
+
   // Gắn ảnh (user đã tạo từ prompt) vào 1 @tag nguyên liệu — dùng chung dialog asset:attach.
   async attachAssetImage(projectId, tag) {
     const res = await window.danh.assets.attach(projectId, tag)
     if (res.ok) await get().loadAssets(projectId)
     else set({ wizardError: res.error })
+  },
+
+  // ⭐ Khóa mặt bằng TAY: nạp lại CẢ coverage (không chỉ danh sách asset) để thanh
+  // "còn thiếu khóa" và chốt cổng cập nhật ngay, không phải bấm đi bấm lại.
+  async lockIdentity(projectId, tag, lock) {
+    const res = await window.danh.assets2.lock(projectId, tag, lock)
+    if (!res.ok) {
+      set({ wizardError: res.error })
+      return false
+    }
+    await get().loadAssets(projectId)
+    return true
   },
 
   // ---- Sếp điều phối (tab Tự động) ----
@@ -414,6 +455,13 @@ export const useWizard = create<WizardState>((set, get) => ({
 
   clearError() {
     set({ wizardError: null })
+  },
+
+  // Dọn nhật ký tiến độ thợ (steps là biến TOÀN CỤC dùng chung mọi cổng). Gọi khi ĐỔI cổng
+  // để khung "TIẾN ĐỘ THỢ" của cổng CŨ không rò sang cổng mới (VD log write_image_prompt của
+  // GATE 2 hiện nhầm ở màn Phân cảnh). Không đụng chat/plan — chỉ xóa log tạm.
+  clearSteps() {
+    set({ steps: [] })
   }
 }))
 

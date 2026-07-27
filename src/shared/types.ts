@@ -125,11 +125,61 @@ export interface SceneContext {
   mood: string // tông cảm xúc / ánh sáng
 }
 
-/** ⭐ Khóa nhận dạng nhân vật — CỨNG mặt/dáng, MỀM đồ/tóc. */
+/**
+ * ⭐ KHÓA NHẬN DẠNG (Anchor Profile) — CỨNG mặt/dáng, MỀM đồ/đạo cụ.
+ *
+ * Vì sao 6 trường thay vì 2: khóa mặt chỉ bằng `face` quá thưa, thợ viết prompt vẫn
+ * phải tự bịa phần còn lại (tuổi/khí chất/tóc) → mỗi block bịa một kiểu → TRÔI MẶT.
+ * 6 trường dưới bám đúng "hồ sơ nhân vật gốc": khuôn mặt · tỉ lệ ngũ quan · kiểu tóc ·
+ * dáng người · độ tuổi · khí chất. Đủ để app GHÉP thành 1 khối anchor bất biến,
+ * chèn NGUYÊN VĂN vào mọi prompt (xem buildAnchorBlock) — thợ KHÔNG diễn giải lại.
+ *
+ * Với asset `scene`/`prop`/`product`: dùng `face` tả tổng thể nơi chốn/vật thể,
+ * các trường còn lại để trống.
+ *
+ * face/body giữ nguyên tên để TƯƠNG THÍCH NGƯỢC với dữ liệu đã lưu (dự án cũ chỉ có 2 trường).
+ */
+/**
+ * HỒ SƠ GỐC BẤT BIẾN của 1 asset — thứ app ghép thành khối [IDENTITY LOCK].
+ *
+ * ⭐ CHIA 2 TẦNG có chủ đích (đừng gộp lại):
+ *
+ * **Tầng ẢNH** (age→face→features→signature→hair→body→wardrobe→aura) — vào khối anchor,
+ * chèn nguyên văn vào 100% prompt ảnh. Đây là các đặc trưng model ảnh THẤY được.
+ *
+ * **Tầng ĐỘNG** (demeanor, voice) — CỐ Ý không vào anchor ảnh. Ảnh tĩnh không có dáng đi,
+ * không có giọng nói; nhét vào chỉ làm prompt phình và loãng tín hiệu (BytePlus: có ảnh
+ * tham chiếu thì prompt phải NGẮN lại, không dài ra). Hai ô này chỉ dùng ở cổng video/audio.
+ */
 export interface IdentityLock {
-  face: string // mô tả khuôn mặt (khóa cứng)
-  body: string // vóc dáng (khóa cứng)
-  // đồ/tóc/đạo cụ nằm ở variations (mềm, đổi theo cảnh)
+  // ── Tầng ẢNH ──────────────────────────────────────────────
+  face: string // khuôn mặt: hình dáng mặt, tông da (khóa cứng)
+  body: string // vóc dáng: tỉ lệ đầu-thân, chiều cao, thể trạng (khóa cứng)
+  features?: string // tỉ lệ ngũ quan: mắt/mũi/miệng/lông mày/gò má chi tiết
+  /**
+   * ⭐ DẤU NHẬN DIỆN cố định: nốt ruồi, sẹo, tàn nhang, hình xăm, răng khểnh, lúm đồng tiền.
+   * Tách riêng khỏi `face` vì đây là tín hiệu danh tính MẠNH NHẤT trên mỗi đơn vị chữ —
+   * "nốt ruồi dưới đuôi mắt trái" ghim mặt chắc hơn cả đoạn tả hình dáng mặt. Gộp chung
+   * vào `face` thì nó bị chìm giữa câu và model hay bỏ qua.
+   */
+  signature?: string
+  hair?: string // kiểu & màu tóc mặc định (đổi được ở lớp L2, nhưng cần MẶC ĐỊNH)
+  /**
+   * TRANG PHỤC KÝ HIỆU + phụ kiện gắn liền danh tính (kính cận, khuyên tai, mũ, đồng hồ,
+   * màu áo thương hiệu). CHỈ điền khi nhân vật có "bộ đồ nhận diện" xuyên suốt phim
+   * (mascot, KOL, đồng phục). Phim nhiều bối cảnh đổi đồ → ĐỂ TRỐNG, để trang phục ở
+   * lớp mềm theo cảnh, nếu không sẽ chống nhau với bối cảnh từng cảnh.
+   */
+  wardrobe?: string
+  age?: string // độ tuổi (VD "26", "mid-30s")
+  aura?: string // khí chất/thần thái (VD "quiet stubborn intensity")
+
+  // ── Tầng ĐỘNG (KHÔNG vào anchor ảnh) ──────────────────────
+  /** DÁNG ĐIỆU/CỬ CHỈ đặc trưng: dáng đi, thói quen tay, độ nghiêng đầu khi nói. Dùng ở cổng video. */
+  demeanor?: string
+  /** GIỌNG: cao độ, âm sắc, nhịp nói, chất giọng vùng miền. Dùng cho voiceover/lip-sync. */
+  voice?: string
+  // đồ/đạo cụ đổi theo cảnh nằm ở variations (mềm)
 }
 
 /**
@@ -263,6 +313,11 @@ export interface AssetCoverage {
   total: number
   missingPrompt: string[] // @tag chưa có prompt sinh ảnh
   missingImage: string[] // @tag đã có prompt nhưng chưa gắn ảnh
+  /**
+   * ⭐ @tag NHÂN VẬT chưa khóa nhận dạng (identity_lock rỗng) — nguyên nhân số 1 gây
+   * TRÔI MẶT giữa các block. Còn tag ở đây thì chưa được chốt cổng Nguyên liệu.
+   */
+  missingIdentity: string[]
 }
 
 /**
@@ -382,6 +437,23 @@ export interface ExportBlock {
   image_prompt_en: string
   video_prompt: VideoPrompt | null
   asset_ids: number[] // ⭐ id nguyên liệu/biến thể block này dùng (bảng nối block_assets)
+}
+
+/**
+ * ⭐ 1 block đọc cho MÀN WIZARD (khác ExportBlock: có shot_panel + @tag dạng CHỮ để hiện thẳng).
+ * Trước đây renderer không có kênh nào đọc block → cột kết quả GATE 2/3/phân cảnh chỉ hiện
+ * chỗ trống, phải Xuất bản mới xem được prompt. Kênh blocks:list lấp đúng lỗ đó.
+ */
+export interface BlockView {
+  block_id: number
+  scene_order: number
+  scene_summary: string
+  block_order: number
+  shot_desc: string | null
+  image_prompt_en: string | null
+  video_prompt: VideoPrompt | null
+  shot_panel: ShotPanel | null
+  asset_tags: string[] // @tag (không dấu @) suy từ bảng nối block_assets
 }
 
 export interface ExportBundle {

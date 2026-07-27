@@ -14,6 +14,7 @@ import type {
   DirectorBible,
   VisualSystem,
   AssetRole,
+  AssetFull,
   DeriveKind
 } from '../../shared/types'
 import {
@@ -27,6 +28,7 @@ import {
 } from './validators'
 import { scanCraft, readCraftFile } from '../core/craftRegistry'
 import { extractTags } from '../pipeline/tagGuard'
+import { anchorLine, ensureAnchor, hasLock } from '../../shared/anchor'
 
 /**
  * Nối 1 block → các asset nó dùng, gộp 2 nguồn:
@@ -37,14 +39,40 @@ import { extractTags } from '../pipeline/tagGuard'
 function linkAssetsFromTags(
   projectId: number,
   blockId: number,
-  declaredTags: string[] | undefined,
+  declaredTags: unknown,
   promptText: string
 ): void {
   const tags = new Set<string>()
-  for (const t of declaredTags ?? []) tags.add(t.replace(/^@/, '').toUpperCase())
+  // declaredTags đến thẳng từ LLM → có thể là chuỗi. Nếu for...of trên chuỗi thì nó
+  // duyệt TỪNG KÝ TỰ (hỏng âm thầm, không nổ) → bắt buộc chuẩn hóa trước.
+  for (const t of coerceTagList(declaredTags)) tags.add(t.replace(/^@/, '').toUpperCase())
   for (const t of extractTags(promptText)) tags.add(t)
   const ids = db.resolveTagsToAssetIds(projectId, [...tags])
   db.linkBlockAssets(blockId, ids)
+}
+
+/**
+ * ⭐ CHUẨN HÓA field `tags` về MẢNG chuỗi (chống lỗi "tagNames.map is not a function").
+ * LLM (qua 9router) thường KHÔNG gửi tags đúng dạng mảng: có khi là 1 chuỗi
+ * "LAN, SERUM" hoặc "@LAN", có khi là null/undefined, hiếm khi là số. resolveTags/
+ * resolveTagsToAssetIds đều gọi .map trên tham số này → nếu là chuỗi sẽ NỔ ngay,
+ * mất trắng cả lượt ghi (đúng lỗi user gặp ở GATE 3: thợ phải BỎ tags mới ghi được).
+ * Hàm này nhận MỌI kiểu và luôn trả về string[] sạch:
+ *   - đã là mảng → lọc phần tử chuỗi không rỗng.
+ *   - là chuỗi → tách theo dấu phẩy/space/@ thành nhiều tag.
+ *   - còn lại (null/số/object) → [].
+ */
+function coerceTagList(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw.filter((t): t is string => typeof t === 'string' && t.trim() !== '')
+  }
+  if (typeof raw === 'string' && raw.trim() !== '') {
+    return raw
+      .split(/[,;\s]+/)
+      .map((t) => t.trim())
+      .filter((t) => t !== '')
+  }
+  return []
 }
 
 /** Ngữ cảnh chạy tool: buộc trong 1 dự án. */
@@ -133,22 +161,39 @@ const readAssets: ToolDef = {
     name: 'read_assets',
     description:
       '⭐ Đọc TẤT CẢ @tag tài nguyên đã tạo (nhân vật/sản phẩm/đạo cụ/BỐI CẢNH) + loại + mô tả khóa. ' +
-      'Dùng TRƯỚC khi viết prompt để nhúng ĐÚNG @tag — nhất là @tag bối cảnh (type=scene) cho mọi cảnh cùng nơi chốn.',
+      'Dùng TRƯỚC khi viết prompt để nhúng ĐÚNG @tag — nhất là @tag bối cảnh (type=scene) cho mọi cảnh cùng nơi chốn.\n' +
+      '⚠️ ĐỌC `identity_locked`: true = ĐÃ khóa, app sẽ tự chèn khối [IDENTITY LOCK] vào prompt ảnh — ' +
+      'CỨ VIẾT BÌNH THƯỜNG, KHÔNG cần điền thêm ô nào, KHÔNG được dừng lại đòi bổ sung. ' +
+      '`identity_anchor` là khối chữ app sẽ chèn nguyên văn: chỉ để bạn BIẾT đã có gì mà tránh tả chồng ở thân prompt, ' +
+      'KHÔNG phải chép lại. Chỉ khi identity_locked=false mới cần gọi lock_identity.',
     input_schema: { type: 'object', properties: {} }
   },
   handler: (_input, ctx) => {
-    // ⭐ Trả kèm KHÓA CỨNG (mặt/dáng) + tóm tắt gen_prompt để worker khóa ngoại hình,
+    // ⭐ Trả kèm KHÓA NHẬN DẠNG + tóm tắt gen_prompt để worker khóa ngoại hình,
     //    không chỉ lock_note chung chung → chống nhân vật trôi mặt giữa các block.
+    //
+    // ⚠️ VÌ SAO TRẢ NGUYÊN KHỐI ANCHOR chứ không chỉ face/body: bản cũ chỉ ló ra 2
+    // trường `identity_face` + `identity_body`. Người dùng điền đủ 6–8 ô ở form (ngũ
+    // quan, dấu nhận diện, tóc, khí chất...) nhưng thợ ĐỌC CHỈ THẤY 2 → nó kết luận
+    // "hồ sơ mới có 2 mục, chưa đủ để ghép khối", rồi TỰ BỊA ra luật "phải có features
+    // mới chèn được anchor" và DỪNG giữa chừng (ca thật: dừng sau 3/16 block).
+    // Luật đó không tồn tại: hasLock() chỉ cần MỘT ô có chữ. Cho thợ thấy đúng thứ app
+    // sẽ chèn thì nó hết cớ đoán mò.
     const full = db.listAssetsFull(ctx.projectId)
     const lockByTag = new Map(full.map((a) => [a.tag, a]))
     return db.projectTagMap(ctx.projectId).map((t) => {
       const a = lockByTag.get(t.tag)
+      const locked = hasLock(a?.identity_lock)
       return {
         tag: `@${t.tag}`,
         role: t.role,
         lock_note: t.lock_note,
-        identity_face: a?.identity_lock?.face || undefined,
-        identity_body: a?.identity_lock?.body || undefined,
+        // Trạng thái khóa — thứ DUY NHẤT quyết định app có chèn anchor được hay không.
+        identity_locked: locked,
+        // Khối chữ app sẽ chèn NGUYÊN VĂN vào đầu mọi prompt ảnh của @tag này.
+        // Thợ KHÔNG cần chép lại (write_image_prompt tự chèn), chỉ để BIẾT đã có gì
+        // mà tránh tả chồng ở thân prompt.
+        identity_anchor: locked ? anchorLine(t.tag, a?.identity_lock) : undefined,
         appearance_hint: a?.gen_prompt ? a.gen_prompt.slice(0, 240) : undefined,
         has_ref_image: !!t.ref_image_path
       }
@@ -520,16 +565,54 @@ const writeImagePrompt: ToolDef = {
   },
   handler: (input, ctx) => {
     assertImagePrompt(input)
-    const promptText = input.image_prompt_en as string
+    const raw = input.image_prompt_en as string
+    // ⚠️ KHÔNG ép kiểu `as string[]`: thợ hay gửi 1 chuỗi "@NUCHINH, @COCO" thay vì mảng.
+    // Ép kiểu chỉ lừa TypeScript, lúc chạy vẫn nổ "only.map is not a function" và mất
+    // trắng lượt ghi. coerceTagList nhận mọi kiểu → luôn ra string[] sạch.
+    const declared = coerceTagList(input.associate_asset_tags)
+
+    // ⭐ CHỐT CHẶN CUỐI chống trôi mặt: app tự CHÈN khối [IDENTITY LOCK] vào đầu prompt.
+    // Dù thợ quên hay diễn giải lại ngoại hình bằng lời của nó, prompt LƯU VÀO DB vẫn
+    // mở đầu bằng CÙNG một khối chữ cho mọi block → 16/16 block giống nhau đến từng ký tự.
+    // Không chèn chồng nếu prompt đã có khối (chạy lại/sửa lại vẫn an toàn).
+    const assets = db.listAssetsFull(ctx.projectId)
+    const promptText = ensureAnchor(raw, assets, declared)
+
     const id = db.upsertBlock(
       ctx.projectId,
       input.scene_order as number,
       input.block_order as number,
       { image_prompt_en: promptText }
     )
-    linkAssetsFromTags(ctx.projectId, id, input.associate_asset_tags as string[] | undefined, promptText)
-    return { block_id: id, ok: true }
+    linkAssetsFromTags(ctx.projectId, id, declared, promptText)
+
+    // ⭐ CẢNH BÁO NGAY TẠI CHỖ: trước đây trả anchor_applied:false lặng lẽ, thợ ghi trọn
+    // 16 block rồi mới lòi ra là KHÔNG block nào có khối khóa mặt (đúng ca người dùng gặp).
+    // Nói thẳng lý do + cách sửa ngay ở lượt ghi ĐẦU TIÊN để dừng sớm.
+    const anchorApplied = promptText !== raw
+    const usedTags = declared.length ? declared : extractTags(raw)
+    const needsLock =
+      !anchorApplied && usedTags.length > 0 && !ensureAnchorable(assets, usedTags)
+    return {
+      block_id: id,
+      ok: true,
+      anchor_applied: anchorApplied,
+      ...(needsLock
+        ? {
+            warning:
+              'KHÔNG chèn được khối [IDENTITY LOCK] — @tag dùng trong prompt chưa được khóa nhận dạng. ' +
+              'Ảnh sẽ ra mặt khác nhau giữa các block. Hãy gọi lock_identity cho các @tag đó (ở cổng Nguyên liệu) ' +
+              'rồi ghi lại prompt này.'
+          }
+        : {})
+    }
   }
+}
+
+/** Có asset nào trong `tags` đã khóa nhận dạng không (để cảnh báo khi anchor không chèn được). */
+function ensureAnchorable(assets: AssetFull[], tags: string[]): boolean {
+  const want = new Set(tags.map((t) => t.replace(/^@/, '').toUpperCase()))
+  return assets.some((a) => want.has(a.tag.toUpperCase()) && hasLock(a.identity_lock))
 }
 
 const writeVideoPrompt: ToolDef = {
@@ -576,7 +659,7 @@ const writeVideoPrompt: ToolDef = {
   },
   handler: (input, ctx) => {
     assertVideoPrompt(input)
-    const tagNames = (input.tags as string[]) ?? []
+    const tagNames = coerceTagList(input.tags)
     const vp: VideoPrompt = {
       style: input.style as string,
       scene: input.scene as string,
@@ -795,6 +878,102 @@ const deriveAssets: ToolDef = {
   }
 }
 
+/**
+ * ⭐ KHÓA NHẬN DẠNG — tool QUAN TRỌNG NHẤT chống trôi mặt.
+ *
+ * Trước bản vá này, cổng Nguyên liệu KHÔNG có tool nào ghi được identity_lock
+ * (save_asset chỉ có ở cổng Prompt ảnh, chạy quá muộn) → 100% asset để NULL →
+ * thợ prompt phải tự bịa ngoại hình ở từng block → mỗi block một khuôn mặt.
+ */
+const lockIdentity: ToolDef = {
+  schema: {
+    name: 'lock_identity',
+    description:
+      '⭐⭐ BẮT BUỘC cho MỌI nhân vật (char) và sản phẩm (product): ghi HỒ SƠ GỐC bất biến. ' +
+      'App sẽ GHÉP 6 trường này thành 1 khối [IDENTITY LOCK] và CHÈN NGUYÊN VĂN vào đầu MỌI prompt ảnh về sau — ' +
+      'nhờ vậy 100% block dùng CÙNG một mô tả, không trôi mặt. Viết TIẾNG ANH (prompt ảnh là tiếng Anh). ' +
+      'Tả CỤ THỂ, ĐO ĐẾM ĐƯỢC (hình dáng mặt, khoảng cách/độ nghiêng mắt, sống mũi, môi, gò má, tỉ lệ đầu-thân) — ' +
+      'CẤM chung chung kiểu "đẹp", "cuốn hút". CẤM tên người thật; muốn tả khí chất thì dùng ngôn ngữ so sánh trừu tượng. ' +
+      'Gọi NHIỀU LƯỢT được: chỉ trường có nội dung mới bị ghi đè, trường bỏ trống giữ nguyên giá trị cũ. ' +
+      'Với product: dùng face tả hình dạng/nhãn/vật liệu, body tả kích thước tương đối; các trường khác bỏ trống.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        tag: { type: 'string', description: 'Tag asset ĐÃ TỒN TẠI (không kèm @). Sai tag sẽ báo lỗi.' },
+        face: {
+          type: 'string',
+          description:
+            'KHUÔN MẶT: hình dáng mặt (oval/vuông/trái xoan), tông da, nét nhận diện cố định (tàn nhang, nốt ruồi, sẹo). VD: "Oval face, warm tan skin, faint freckles across nose bridge".'
+        },
+        features: {
+          type: 'string',
+          description:
+            'TỈ LỆ NGŨ QUAN (chi tiết nhất, quyết định giống/khác): mắt (hình dáng, mí, độ xếch), lông mày, mũi (sống, cánh), miệng (độ dày môi), gò má, cằm. VD: "Single-fold almond eyes slightly downturned, straight nose bridge, full lower lip, high cheekbones".'
+        },
+        signature: {
+          type: 'string',
+          description:
+            '⭐ DẤU NHẬN DIỆN CỐ ĐỊNH — mạnh nhất trên mỗi chữ, ƯU TIÊN điền: nốt ruồi (nêu RÕ vị trí), sẹo, tàn nhang, hình xăm, răng khểnh, lúm đồng tiền, đốm mắt. VD: "Small mole below the outer corner of the left eye, faint scar through right eyebrow". Không có đặc điểm gì nổi bật thì để trống, ĐỪNG bịa.'
+        },
+        hair: {
+          type: 'string',
+          description:
+            'TÓC MẶC ĐỊNH: màu, độ dài, kiểu, ngôi rẽ. VD: "Black hair, shoulder-length, center part, slight natural wave". (Đổi được ở biến thể L2, nhưng phải có mặc định.)'
+        },
+        body: {
+          type: 'string',
+          description:
+            'DÁNG NGƯỜI: tỉ lệ đầu-thân, chiều cao tương đối, thể trạng, tư thế đặc trưng. VD: "Athletic build, 7.5-head proportion, broad shoulders, upright posture".'
+        },
+        age: { type: 'string', description: 'ĐỘ TUỔI cụ thể. VD: "26" hoặc "mid-30s".' },
+        wardrobe: {
+          type: 'string',
+          description:
+            'TRANG PHỤC KÝ HIỆU + phụ kiện gắn liền danh tính (kính, khuyên tai, mũ, đồng hồ, màu áo thương hiệu). ⚠️ CHỈ điền khi nhân vật mặc CÙNG một bộ xuyên suốt phim (mascot/KOL/đồng phục). Phim nhiều bối cảnh đổi đồ → ĐỂ TRỐNG, vì khối này chèn vào MỌI prompt sẽ chống nhau với trang phục riêng từng cảnh.'
+        },
+        aura: {
+          type: 'string',
+          description:
+            'KHÍ CHẤT/THẦN THÁI — dùng ngôn ngữ so sánh trừu tượng (model bám vibe rất tốt), KHÔNG tên người thật. VD: "quiet stubborn intensity, the calm of someone used to being underestimated".'
+        },
+        demeanor: {
+          type: 'string',
+          description:
+            '🎬 CHỈ DÙNG Ở CỔNG VIDEO (không vào prompt ảnh): dáng đi, cử chỉ tay quen, độ nghiêng đầu khi nói, nhịp chớp mắt. VD: "walks with long unhurried strides, tilts head slightly left when listening". Giúp mọi block cùng một dáng, không phải block này dứt khoát block kia rón rén.'
+        },
+        voice: {
+          type: 'string',
+          description:
+            '🎙️ CHỈ DÙNG cho voiceover/lip-sync (không vào prompt ảnh): cao độ, âm sắc, nhịp nói, chất giọng vùng miền. VD: "low warm alto, unhurried pacing, soft Southern Vietnamese accent".'
+        }
+      },
+      required: ['tag']
+    }
+  },
+  handler: (input, ctx) => {
+    const tag = String(input.tag ?? '').replace(/^@/, '')
+    db.saveIdentityLockByTag(ctx.projectId, tag, {
+      face: input.face as string | undefined,
+      features: input.features as string | undefined,
+      signature: input.signature as string | undefined,
+      hair: input.hair as string | undefined,
+      body: input.body as string | undefined,
+      wardrobe: input.wardrobe as string | undefined,
+      age: input.age as string | undefined,
+      aura: input.aura as string | undefined,
+      demeanor: input.demeanor as string | undefined,
+      voice: input.voice as string | undefined
+    })
+    // Trả lại khối anchor đã ghép để thợ THẤY ngay thứ sẽ được chèn vào mọi prompt.
+    const asset = db.listAssetsFull(ctx.projectId).find((a) => a.tag === tag)
+    return {
+      ok: true,
+      tag: `@${tag}`,
+      anchor_preview: asset ? anchorLine(tag, asset.identity_lock) : ''
+    }
+  }
+}
+
 const writeAssetPrompt: ToolDef = {
   schema: {
     name: 'write_asset_prompt',
@@ -882,8 +1061,12 @@ const writeVisualSystem: ToolDef = {
     }
   },
   handler: (input, ctx) => {
+    // ⚠️ Model đôi khi trả color_script SAI KIỂU (chuỗi/object thay vì mảng) → renderer
+    //    .slice().sort() nổ, sập cả Wizard. Ép về mảng NGAY tại đây để DB luôn sạch.
+    const raw = input.color_script
+    const color_script = (Array.isArray(raw) ? raw : []) as VisualSystem['color_script']
     const vs: VisualSystem = {
-      color_script: (input.color_script as VisualSystem['color_script']) ?? [],
+      color_script,
       lighting: input.lighting as string | undefined,
       texture: input.texture as string | undefined,
       palette_note: input.palette_note as string | undefined
@@ -897,11 +1080,45 @@ const readAssetCoverage: ToolDef = {
   schema: {
     name: 'read_asset_coverage',
     description:
-      '⭐ Soát ĐỘ PHỦ nguyên liệu: liệt kê @tag thiếu prompt sinh ảnh / thiếu ảnh đã upload. ' +
-      'Dùng để không bỏ sót trước khi chốt cổng Nguyên liệu. missingPrompt rỗng = đủ prompt.',
+      '⭐ Soát ĐỘ PHỦ nguyên liệu trước khi chốt cổng. 3 danh sách:\n' +
+      '• missingIdentity = @tag char/product CHƯA khóa nhận dạng — ƯU TIÊN SỐ 1, còn tag nào là mặt sẽ TRÔI ở bước prompt ảnh. Khắc phục: gọi lock_identity.\n' +
+      '• missingPrompt = @tag chưa có prompt sinh ảnh. Khắc phục: write_asset_prompt.\n' +
+      '• missingImage = đã có prompt nhưng người dùng chưa upload ảnh (việc của người dùng, không phải của bạn).\n' +
+      'Chốt cổng khi missingIdentity và missingPrompt đều rỗng.',
     input_schema: { type: 'object', properties: {} }
   },
   handler: (_input, ctx) => db.assetCoverage(ctx.projectId)
+}
+
+const checkIdentityDrift: ToolDef = {
+  schema: {
+    name: 'check_identity_drift',
+    description:
+      '⭐ TỰ SOÁT TRÔI MẶT — chạy TRƯỚC khi báo cáo xong prompt ảnh. Quét mọi prompt ảnh có nhắc @tag nhân vật, tìm 2 lỗi:\n' +
+      '• thieu-anchor = prompt nhắc @tag nhưng không có khối [IDENTITY LOCK] mở đầu.\n' +
+      '• ta-lai-* = tả CHỒNG ngoại hình cố định ở thân prompt (mặt/ngũ quan/tuổi/da/dáng/tóc) — hai mô tả cùng tồn tại thì model chọn bừa, mặt vẫn trôi dù đã có anchor.\n' +
+      'Sửa: XÓA cụm bị bắt khỏi thân prompt rồi write_image_prompt lại block đó. Giữ biểu cảm/ánh mắt (lớp mềm), chỉ bỏ đặc điểm CỐ ĐỊNH.\n' +
+      '⚠️ ĐỌC KỸ TRƯỜNG `warning` TRƯỚC: nếu locked_tags rỗng thì blocks rỗng KHÔNG có nghĩa là sạch — ' +
+      'chưa khóa nhận dạng thì không có gì để đối chiếu và app không chèn được anchor (anchor_applied luôn false). ' +
+      'Khi đó phải gọi lock_identity cho unlocked_tags trước, rồi ghi lại prompt ảnh.\n' +
+      'Chỉ khi locked_tags KHÔNG rỗng VÀ blocks rỗng thì mới là sạch thật.',
+    input_schema: { type: 'object', properties: {} }
+  },
+  handler: (_input, ctx) => db.identityDriftReport(ctx.projectId)
+}
+
+const checkVideoDrift: ToolDef = {
+  schema: {
+    name: 'check_video_drift',
+    description:
+      '⭐ TỰ SOÁT TRÔI MẶT (bản VIDEO) — chạy TRƯỚC khi báo cáo xong prompt video. Quét field scene/motion/constraints của mọi block.\n' +
+      'Bắt lỗi ta-lai-*: tả LẠI ngoại hình cố định (mặt/ngũ quan/tuổi/da/dáng/tóc) của @tag nhân vật.\n' +
+      'Vì sao là lỗi: video lấy danh tính từ ẢNH đầu vào (first frame) đã khóa mặt — tả lại bằng chữ là ép model VẼ MẶT MỚI, phí toàn bộ công khóa mặt ở bước ảnh.\n' +
+      'KHÔNG đòi khối [IDENTITY LOCK] ở prompt video (đó là của prompt ảnh).\n' +
+      'Sửa: xóa cụm bị bắt, scene/motion chỉ giữ HÀNH ĐỘNG · CAMERA · ÁNH SÁNG · bối cảnh, rồi write_video_prompt lại block đó. blocks rỗng = sạch.',
+    input_schema: { type: 'object', properties: {} }
+  },
+  handler: (_input, ctx) => db.videoDriftReport(ctx.projectId)
 }
 
 // ---------------- Craft tự-rút (progressive-disclosure) ----------------
@@ -1073,10 +1290,13 @@ export const ALL_TOOLS: ToolDef[] = [
   writeDirectorBible,
   // nguyên liệu
   deriveAssets,
+  lockIdentity,
   writeAssetPrompt,
   saveDerivedAssetTool,
   writeVisualSystem,
   readAssetCoverage,
+  checkIdentityDrift,
+  checkVideoDrift,
   // craft tự-rút (progressive-disclosure)
   listSkills,
   readSkillFileTool
@@ -1091,6 +1311,23 @@ export function schemasOf(defs: ToolDef[]): ToolSchema[] {
   return defs.map((d) => d.schema)
 }
 
+/**
+ * Khớp tool theo tên. Ưu tiên khớp CHÍNH XÁC (Anthropic thật luôn trúng đây).
+ *
+ * ⚠️ Cổng gom 9router BIẾN DẠNG tên tool khi trả về: thêm hậu tố cố định "_ide"
+ * (kiểm chứng: read_ideal→read_ideal_ide, write_ideal_brief→write_ideal_brief_ide,
+ * foo_bar→foo_bar_ide). Khớp chính xác sẽ trượt hết → "Tool không tồn tại" → mọi
+ * bước có tool (prep/kịch bản/nguyên liệu) chết câm khi dùng 9router. Nên nếu không
+ * khớp chính xác, khớp theo tool có tên là TIỀN TỐ DÀI NHẤT của tên trả về (chọn dài
+ * nhất để không nhầm read_scenes ⊂ read_scenes_x sang read_script_full).
+ */
 export function findTool(defs: ToolDef[], name: string): ToolDef | undefined {
-  return defs.find((d) => d.schema.name === name)
+  const exact = defs.find((d) => d.schema.name === name)
+  if (exact) return exact
+  let best: ToolDef | undefined
+  for (const d of defs) {
+    const n = d.schema.name
+    if (name.startsWith(n) && (!best || n.length > best.schema.name.length)) best = d
+  }
+  return best
 }
