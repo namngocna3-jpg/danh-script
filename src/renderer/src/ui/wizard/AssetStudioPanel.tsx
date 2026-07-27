@@ -546,6 +546,23 @@ function IdentityLockForm({
         )}
       </div>
 
+      {/* ⭐ CHẾ ĐỘ TRỎ — phải nói rõ, nếu không người dùng điền đủ 8 ô rồi thấy prompt chỉ
+          lấy 2 sẽ tưởng app nuốt mất chữ. Xem shared/anchor.ts · ANCHOR_ORDER_REF. */}
+      {hasImage && (
+        <div className="rounded border border-emerald-500/25 bg-emerald-500/5 p-2 text-[11px] leading-relaxed text-emerald-100/80">
+          @{tag} <b className="text-emerald-200">đã có ảnh tư liệu</b> → khối{' '}
+          <code className="text-slate-300">[IDENTITY LOCK]</code> chỉ lấy{' '}
+          <b className="text-emerald-200">Dấu nhận diện + Khí chất</b>, kèm một câu trỏ về ảnh.{' '}
+          {isProduct ? 'Bao bì' : 'Ngũ quan, tóc, vóc dáng'} thì{' '}
+          <b className="text-emerald-200">ảnh đã nói hết</b> — tả lại bằng chữ là tạo nguồn thứ
+          hai đánh nhau với ảnh, model vẽ ra {isProduct ? 'nhãn' : 'mặt'} thứ ba.
+          <div className="mt-1 text-slate-400">
+            Các ô còn lại <b className="text-slate-300">vẫn nên điền</b>: chúng được lưu, và sẽ
+            dùng lại ngay nếu bạn gỡ ảnh — chỉ là tạm không vào prompt.
+          </div>
+        </div>
+      )}
+
       {/* ⭐ Đọc ảnh: đường NHANH NHẤT để có hồ sơ đúng — model nhìn chính ảnh sẽ dùng làm
           tham chiếu, nên chữ và ảnh không còn nói hai đằng. */}
       <div className="flex flex-wrap items-center gap-2 rounded border border-ink-800 bg-ink-950/40 p-2">

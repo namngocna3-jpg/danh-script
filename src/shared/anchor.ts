@@ -47,6 +47,47 @@ const ANCHOR_ORDER = [
   'aura'
 ] as const satisfies ReadonlyArray<keyof IdentityLock>
 
+/**
+ * ⭐ CHẾ ĐỘ TRỎ — thứ tự ghép khi asset ĐÃ CÓ ẢNH tư liệu.
+ *
+ * VÌ SAO PHẢI KHÁC: khi người dùng đính ảnh ref vào Seedance, khối chữ tả lại ngũ quan
+ * ("oval face, almond eyes, fair skin") trở thành NGUỒN MÔ TẢ THỨ HAI cạnh tranh với
+ * chính tấm ảnh. Model có 2 nguồn tả mặt → vẽ ra mặt THỨ BA. Đây đúng ca thật: người
+ * dùng đã đính ảnh mà mặt vẫn trôi.
+ *
+ * Chính `identity-lock.md` đã ghi luật này ("có ảnh tham chiếu thì prompt phải NGẮN LẠI,
+ * không dài ra" — theo khuyến nghị BytePlus) nhưng app mới chỉ áp cho dáng đi/giọng nói,
+ * chưa áp cho khối anchor.
+ *
+ * GIỮ LẠI đúng 2 ô:
+ *  • `signature` — nốt ruồi/sẹo/xăm. Ảnh nén JPEG hay làm mất chi tiết nhỏ này, mà nó
+ *    lại là tín hiệu danh tính mạnh nhất trên mỗi đơn vị chữ → chữ BÙ cho ảnh, không đè.
+ *  • `aura` — khí chất chi phối BIỂU CẢM, không phải hình dáng ngũ quan → không cạnh tranh.
+ *
+ * BỎ: age/face/features/hair/body/wardrobe — ảnh đã nói hết, viết lại chỉ gây xung đột.
+ *
+ * ⚠️ ĐỪNG NỚI DANH SÁCH NÀY khi đọc "kỹ thuật giữ nhân vật #2" của tài liệu chính thức
+ * (câu đó bảo *vẫn nhắc lại ngoại hình bằng chữ*). Nghe như chỏi nhau nhưng không phải:
+ * kỹ thuật #2 nói về **character reference dùng lại xuyên nhiều clip**, và nói **liều NHẸ**
+ * (1–2 đặc điểm ổn định) — đúng bằng `signature` + `aura` ở đây. Còn khi tham chiếu là
+ * **khung đầu của chính clip đó** thì tài liệu image-to-video dặn ngược lại: KHÔNG tả lại.
+ * Nới về 8 ô = quay lại đúng lỗi cũ "đính ảnh mà mặt vẫn trôi". Xem byteplus-spec mục 8bis-A.
+ */
+const ANCHOR_ORDER_REF = ['signature', 'aura'] as const satisfies ReadonlyArray<
+  keyof IdentityLock
+>
+
+/**
+ * Câu TRỎ VỀ ẢNH — thay cho đoạn tả ngũ quan khi asset đã có ảnh tư liệu.
+ * Viết TIẾNG ANH vì đây là chữ đi thẳng vào prompt cho engine.
+ */
+function refPointer(tag: string): string {
+  return (
+    `identity, facial structure and body proportions come from the @${tag} reference image ` +
+    `— reproduce exactly, do not reinterpret`
+  )
+}
+
 /** Có nội dung khóa nào không (rỗng hết = chưa khóa mặt). */
 export function hasLock(lock: IdentityLock | null | undefined): boolean {
   if (!lock) return false
@@ -55,13 +96,27 @@ export function hasLock(lock: IdentityLock | null | undefined): boolean {
 
 /**
  * Dựng 1 DÒNG anchor cho 1 asset: "@TAG: <các mục ghép lại>".
- * Thứ tự cố định theo ANCHOR_ORDER để mọi lần ghép ra chuỗi GIỐNG HỆT nhau —
- * đây chính là thứ khiến 16 block không lệch. Trả '' nếu asset chưa khóa gì.
+ * Thứ tự cố định để mọi lần ghép ra chuỗi GIỐNG HỆT nhau — đây chính là thứ khiến
+ * 16 block không lệch. Trả '' nếu asset chưa khóa gì.
+ *
+ * `hasRefImage`: asset đã gắn ảnh tư liệu chưa.
+ *  • false (mặc định) → CHẾ ĐỘ MÔ TẢ: ghép đủ 8 ô, vì chữ là thứ DUY NHẤT khóa được.
+ *  • true             → CHẾ ĐỘ TRỎ: câu trỏ về ảnh + signature + aura (xem ANCHOR_ORDER_REF).
+ *
+ * Quyết định theo TỪNG asset, không theo cả dự án: @NUCHINH có ảnh thì dùng dòng trỏ,
+ * @BANHMI chưa có ảnh vẫn dùng dòng tả đầy đủ — trộn trong cùng một khối là đúng.
  */
-export function anchorLine(tag: string, lock: IdentityLock | null | undefined): string {
+export function anchorLine(
+  tag: string,
+  lock: IdentityLock | null | undefined,
+  hasRefImage = false
+): string {
   if (!hasLock(lock)) return ''
   const l = lock as IdentityLock
-  const parts = ANCHOR_ORDER.map((k) => l[k]?.trim()).filter((s): s is string => Boolean(s))
+  const order = hasRefImage ? ANCHOR_ORDER_REF : ANCHOR_ORDER
+  const parts = order.map((k) => l[k]?.trim()).filter((s): s is string => Boolean(s))
+  // Chế độ trỏ: câu trỏ đứng ĐẦU (model bám mạnh nhất ở đầu câu), signature/aura bổ sung sau.
+  if (hasRefImage) parts.unshift(refPointer(tag))
   return `@${tag}: ${parts.join('. ')}.`
 }
 
@@ -104,7 +159,9 @@ export function buildAnchorBlock(assets: AssetFull[], only?: unknown): string {
   const lines: string[] = []
   for (const a of assets) {
     if (want && !want.has(a.tag.toUpperCase())) continue
-    const line = anchorLine(a.tag, a.identity_lock)
+    // ⭐ Có ảnh tư liệu → dòng TRỎ (ngắn, không tả ngũ quan). Chưa có → dòng TẢ đầy đủ.
+    //    Tự chuyển chế độ khi người dùng gắn ảnh ở Xưởng nguyên liệu — không có nút gạt nào để quên.
+    const line = anchorLine(a.tag, a.identity_lock, !!a.ref_image_path)
     if (line) lines.push(line)
   }
   if (!lines.length) return ''
@@ -143,6 +200,100 @@ export function buildDynamicBlock(assets: AssetFull[]): string {
 /** Prompt đã chứa khối anchor chưa (để không chèn chồng khi thợ đã tự chèn đúng). */
 export function hasAnchor(prompt: string): boolean {
   return prompt.includes(ANCHOR_OPEN)
+}
+
+// ============================================================
+// CÂU KHÓA DANH TÍNH CHO PROMPT VIDEO
+// ============================================================
+
+/**
+ * ⭐ Câu khóa danh tính cho ô `constraints` của prompt VIDEO — APP GHÉP, không để thợ viết.
+ *
+ * VÌ SAO PHẢI CÓ: prompt ẢNH được app chèn cứng khối [IDENTITY LOCK] (ensureAnchor) nên
+ * 16 block ra 16 chuỗi giống hệt nhau. Prompt VIDEO thì KHÔNG có cơ chế tương đương —
+ * câu khóa do thợ tự viết tay, chỉ được "dặn" trong mô tả tool. Mỗi block một câu khóa
+ * khác nhau ("preserve face" / "stable consistent face" / "100% matches reference") →
+ * đúng chỗ trôi mặt ở khâu video.
+ *
+ * KHÁC anchor ảnh ở chỗ: video KHÔNG tả ngoại hình dù asset chưa có ảnh tư liệu. Video
+ * luôn chạy image-to-video từ ảnh khung đầu (GATE 2) — ảnh đó ĐÃ mang sẵn khuôn mặt.
+ * Tả thêm bằng lời là ép model vẽ lại mặt thay vì làm động ảnh có sẵn.
+ *
+ * CHỈ MỘT câu cho mọi @tag: BytePlus khuyến nghị prompt có ảnh ref phải NGẮN. Ba biến thể
+ * cùng một ý dồn vào 1 prompt làm loãng chính câu khóa (xem `_execution_vidPrompter.md`).
+ *
+ * Trả '' khi không @tag nào đã khóa → chỗ gọi giữ nguyên constraints của thợ.
+ */
+export function buildVideoIdentityLock(assets: AssetFull[], only?: unknown): string {
+  const list = toTagArray(only)
+  const want = list.length ? new Set(list.map((t) => t.replace(/^@/, '').toUpperCase())) : null
+  const tags: string[] = []
+  for (const a of assets) {
+    if (want && !want.has(a.tag.toUpperCase())) continue
+    // Chỉ khóa char/product — bối cảnh/đạo cụ phụ không có "khuôn mặt" để trôi.
+    if (a.role !== 'char' && a.role !== 'product') continue
+    if (!hasLock(a.identity_lock)) continue
+    tags.push(`@${a.tag}`)
+  }
+  if (!tags.length) return ''
+  const list_ = tags.join(' and ')
+  // ⚠️ CỐ Ý KHÔNG có dấu phẩy trong câu này. `VIDEO_LOCK_PATTERNS` dừng ở dấu phẩy (để
+  // không xén nhầm ràng buộc hợp lệ đứng sau); nếu chính câu chuẩn có phẩy thì lần chạy
+  // thứ hai chỉ gỡ được nửa đầu, nửa sau ở lại và bị nhân bản mỗi lần ghi lại prompt.
+  return `preserve ${list_} face and outfit exactly as in the first frame with natural anatomy`
+}
+
+/**
+ * Các mẫu câu khóa danh tính THỢ TỰ VIẾT — cần gỡ trước khi app ghép câu chuẩn vào,
+ * nếu không prompt sẽ có 2–3 câu cùng ý nằm cạnh nhau (chính thứ làm loãng tín hiệu).
+ *
+ * Cố ý bắt HẸP (chỉ các cụm khóa danh tính quen thuộc), KHÔNG bắt rộng: `constraints`
+ * còn chứa ràng buộc hợp lệ khác ("exactly one bottle", "sharp focus") phải giữ nguyên.
+ *
+ * ⚠️ Đuôi `[^.,;]*` phải loại CẢ DẤU PHẨY, không chỉ `.` và `;`. Thợ viết constraints
+ * ngăn nhau bằng dấu phẩy và thường KHÔNG có dấu chấm nào; nếu đuôi cho phép nuốt phẩy
+ * thì mẫu đầu tiên ăn trọn cả chuỗi ("preserve @LAN face…, exactly one bottle…, sharp
+ * focus") → xóa sạch ràng buộc hợp lệ, đúng thứ mà chính chú thích trên hứa giữ lại.
+ */
+const VIDEO_LOCK_PATTERNS: RegExp[] = [
+  /\bpreserve\s+@?[A-Z0-9_]+(?:\s+and\s+@?[A-Z0-9_]+)*\s+(?:face|identity)[^.,;]*/gi,
+  /\b(?:stable|consistent)\s+(?:and\s+)?(?:stable|consistent)?\s*face[^.,;]*/gi,
+  /\b(?:100%\s+)?matches?\s+the\s+reference[^.,;]*/gi,
+  /\bsame\s+(?:character|person)\s+as\s+@?[A-Z0-9_]+[^.,;]*/gi,
+  /\bface\s+identical\s+to\s+@?[A-Z0-9_]+[^.,;]*/gi
+]
+
+/**
+ * ⭐ CHỐT CHẶN CUỐI cho prompt video: gỡ câu khóa thợ tự viết rồi ghép câu CHUẨN của app.
+ *
+ * Đối xứng với `ensureAnchor` bên prompt ảnh. Dù thợ viết kiểu gì, câu khóa LƯU VÀO DB
+ * vẫn giống hệt nhau ở mọi block.
+ *
+ * Trả nguyên `constraints` khi không có @tag nào đã khóa (không có gì để khóa).
+ */
+export function ensureVideoLock(
+  constraints: string,
+  assets: AssetFull[],
+  tags?: unknown
+): string {
+  const lock = buildVideoIdentityLock(assets, tags)
+  if (!lock) return constraints
+
+  // Gỡ mọi biến thể câu khóa thợ tự viết, rồi dọn dấu câu thừa do việc gỡ để lại.
+  let rest = constraints
+  for (const re of VIDEO_LOCK_PATTERNS) {
+    re.lastIndex = 0
+    rest = rest.replace(re, '')
+  }
+  rest = rest
+    .replace(/\s*[,;]\s*(?=[,;])/g, '') // dấu phẩy dính nhau sau khi gỡ
+    .replace(/(^|[.;])\s*[,;]\s*/g, '$1 ') // phẩy mồ côi đầu câu/mệnh đề
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([.,;])/g, '$1')
+    .replace(/^[\s,;.]+|[\s,;]+$/g, '')
+    .trim()
+
+  return rest ? `${lock}, ${rest}` : lock
 }
 
 /**

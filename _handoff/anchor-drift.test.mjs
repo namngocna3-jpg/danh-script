@@ -9,7 +9,9 @@ import {
   anchorLine,
   buildAnchorBlock,
   buildDynamicBlock,
+  buildVideoIdentityLock,
   ensureAnchor,
+  ensureVideoLock,
   hasAnchor,
   checkPromptDrift,
   extractTags,
@@ -247,6 +249,137 @@ console.log('\n[9] Hồ sơ MỞ RỘNG — signature/wardrobe (tầng ảnh) + 
   ok('dặn rõ KHÔNG chép vào prompt', dyn.includes('KHÔNG chép vào prompt'))
   ok('không ai khai tầng động → rỗng', buildDynamicBlock(ASSETS) === '')
   ok('asset chưa khóa gì → rỗng', buildDynamicBlock([{ tag: 'A', identity_lock: null }]) === '')
+}
+
+console.log('\n[10] CHẾ ĐỘ TRỎ — asset đã có ảnh tư liệu thì anchor NGẮN LẠI')
+{
+  // Ca thật: người dùng ĐÃ đính ảnh vào Seedance mà mặt vẫn trôi. Nguyên nhân: khối chữ
+  // tả ngũ quan trở thành NGUỒN THỨ HAI cạnh tranh với chính tấm ảnh → model vẽ mặt THỨ BA.
+  const FULL = {
+    ...LOCK,
+    signature: 'Small mole below outer corner of left eye',
+    wardrobe: 'Round tortoiseshell glasses'
+  }
+  const ref = anchorLine('NUCHINH', FULL, true)
+  const desc = anchorLine('NUCHINH', FULL, false)
+
+  ok('vẫn mở đầu bằng @TAG:', ref.startsWith('@NUCHINH: '))
+  ok('có câu TRỎ VỀ ẢNH', ref.includes('reference image'))
+  ok('câu trỏ đứng ĐẦU (model bám mạnh nhất ở đầu)', ref.indexOf('reference image') < ref.indexOf('Small mole'))
+
+  // 6 ô bị bỏ — đây là toàn bộ lý do tồn tại của chế độ này.
+  ok('BỎ tuổi', !ref.includes('26'))
+  ok('BỎ khuôn mặt/da', !ref.includes('Oval face'))
+  ok('BỎ ngũ quan', !ref.includes('almond eyes'))
+  ok('BỎ tóc', !ref.includes('Black hair'))
+  ok('BỎ vóc dáng', !ref.includes('Athletic build'))
+  ok('BỎ trang phục', !ref.includes('tortoiseshell'))
+
+  // 2 ô GIỮ LẠI — chữ BÙ cho ảnh chứ không đè lên ảnh.
+  ok('GIỮ signature (JPEG hay làm mất nốt ruồi/sẹo)', ref.includes('Small mole'))
+  ok('GIỮ aura (chi phối biểu cảm, không phải hình dáng)', ref.includes('Quiet stubborn'))
+
+  ok('NGẮN HƠN hẳn chế độ tả', ref.length < desc.length)
+  ok('ghép 2 lần vẫn GIỐNG HỆT', anchorLine('NUCHINH', FULL, true) === ref)
+  ok('mặc định (không truyền cờ) = chế độ TẢ — không phá hành vi cũ', anchorLine('NUCHINH', FULL) === desc)
+  ok('chưa khóa gì → rỗng dù có ảnh', anchorLine('X', null, true) === '')
+  ok(
+    'chỉ có signature + có ảnh → vẫn ra dòng trỏ',
+    anchorLine('X', { signature: 'Chipped front tooth' }, true).includes('reference image')
+  )
+
+  console.log('  — buildAnchorBlock tự chọn chế độ THEO TỪNG ASSET')
+  const MIXED = [
+    { tag: 'NUCHINH', identity_lock: FULL, ref_image_path: 'C:/img/nuchinh.png' },
+    { tag: 'BANHMI', identity_lock: { face: 'Golden crusty baguette', aura: 'homely warmth' }, ref_image_path: null }
+  ]
+  const block = buildAnchorBlock(MIXED)
+  ok('asset CÓ ảnh → dòng trỏ', block.includes('reference image'))
+  ok('asset CÓ ảnh → không tả ngũ quan', !block.includes('almond eyes'))
+  ok('asset CHƯA ảnh → vẫn tả đầy đủ', block.includes('Golden crusty baguette'))
+  ok('trộn 2 chế độ trong CÙNG một khối', block.includes('@NUCHINH') && block.includes('@BANHMI'))
+  ok('ref_image_path rỗng chuỗi → coi như CHƯA có ảnh',
+    buildAnchorBlock([{ tag: 'A', identity_lock: FULL, ref_image_path: '' }]).includes('almond eyes'))
+}
+
+console.log('\n[11] KHÓA DANH TÍNH VIDEO — app ghép, không để thợ tự viết')
+{
+  const V = [
+    { tag: 'LAN', role: 'char', identity_lock: LOCK },
+    { tag: 'SERUM', role: 'product', identity_lock: { face: 'Frosted glass bottle, gold cap' } },
+    { tag: 'QUANCAFE', role: 'scene', identity_lock: { face: 'Corner cafe, warm wood' } },
+    { tag: 'CHUAKHOA', role: 'char', identity_lock: null }
+  ]
+
+  console.log('  — buildVideoIdentityLock')
+  const lock = buildVideoIdentityLock(V)
+  ok('gồm nhân vật đã khóa', lock.includes('@LAN'))
+  ok('gồm sản phẩm đã khóa', lock.includes('@SERUM'))
+  ok('BỎ bối cảnh (không có mặt để trôi)', !lock.includes('@QUANCAFE'))
+  ok('BỎ char chưa khóa', !lock.includes('@CHUAKHOA'))
+  ok('nhắc "first frame" (video bám ảnh khung đầu)', lock.includes('first frame'))
+  ok('KHÔNG tả ngoại hình bằng chữ', !lock.includes('almond eyes') && !lock.includes('Oval face'))
+  ok('ghép 2 lần GIỐNG HỆT', buildVideoIdentityLock(V) === lock)
+  ok('lọc theo tags', buildVideoIdentityLock(V, ['LAN']).includes('@LAN') && !buildVideoIdentityLock(V, ['LAN']).includes('@SERUM'))
+  ok('tags dạng CHUỖI → không nổ', buildVideoIdentityLock(V, '@LAN, @SERUM') === lock)
+  ok('không ai khóa → rỗng', buildVideoIdentityLock([{ tag: 'A', role: 'char', identity_lock: null }]) === '')
+
+  console.log('  — ensureVideoLock: gỡ câu thợ viết, ghép câu chuẩn')
+  const CORE = 'sharp focus, five fingers, natural anatomy, no watermark'
+  const out = ensureVideoLock(CORE, V)
+  ok('câu khóa đứng ĐẦU', out.startsWith(lock))
+  ok('giữ nguyên ràng buộc kỹ thuật', out.includes('sharp focus') && out.includes('five fingers'))
+
+  // Đây là lõi của thay đổi: thợ viết kiểu gì thì chuỗi LƯU VÀO DB vẫn giống hệt nhau.
+  const variants = [
+    'preserve @LAN face and outfit exactly, sharp focus',
+    'stable consistent face, sharp focus',
+    '100% matches the reference, sharp focus',
+    'same character as @LAN, sharp focus',
+    'face identical to @LAN, sharp focus'
+  ].map((c) => ensureVideoLock(c, V))
+  ok('5 cách viết khác nhau → 5 kết quả GIỐNG HỆT nhau', new Set(variants).size === 1)
+  ok('kết quả đó có đúng 1 câu khóa', (variants[0].match(/first frame/g) ?? []).length === 1)
+  ok('vẫn giữ sharp focus sau khi gỡ', variants[0].includes('sharp focus'))
+
+  // Gỡ HẸP: constraints còn chứa ràng buộc hợp lệ khác, không được xén nhầm.
+  const layout = ensureVideoLock(
+    'preserve @LAN face exactly, exactly one bottle of @SERUM with label facing camera, @LAN stays on the left, sharp focus',
+    V
+  )
+  ok('GIỮ ràng buộc bố trí "exactly one bottle"', layout.includes('exactly one bottle of @SERUM'))
+  ok('GIỮ "label facing camera"', layout.includes('label facing camera'))
+  ok('GIỮ "@LAN stays on the left"', layout.includes('stays on the left'))
+  ok('chỉ còn 1 câu khóa', (layout.match(/first frame/g) ?? []).length === 1)
+
+  console.log('  — dọn dấu câu + ca biên')
+  ok('constraints RỖNG → chỉ còn câu khóa', ensureVideoLock('', V) === lock)
+  ok('constraints chỉ có câu khóa cũ → không để lại rác', ensureVideoLock('preserve @LAN face exactly', V) === lock)
+  ok('không dấu phẩy mồ côi', !/,\s*,|^\s*,|,\s*$/.test(ensureVideoLock('preserve @LAN face exactly, , sharp focus', V)))
+  ok('không khoảng trắng đôi', !/ {2}/.test(layout))
+  ok(
+    'không @tag nào khóa → GIỮ NGUYÊN constraints của thợ',
+    ensureVideoLock(CORE, [{ tag: 'A', role: 'char', identity_lock: null }]) === CORE
+  )
+  ok('tags dạng CHUỖI → không nổ', ensureVideoLock(CORE, V, '@LAN').startsWith(buildVideoIdentityLock(V, ['LAN'])))
+  ok('tags dạng SỐ → không nổ', ensureVideoLock(CORE, V, 42) === out)
+  ok('chạy 2 lần KHÔNG nhân đôi câu khóa', ensureVideoLock(out, V) === out)
+
+  console.log('  — GIỮ đuôi `avoid ...` (cú pháp CHÍNH THỨC của Seedance)')
+  // Tài liệu prompt chính thức Seedance có cú pháp `avoid ...` ở cuối prompt và liệt kê sẵn
+  // `avoid identity drift` / `avoid temporal flicker` / `avoid jitter`. Trong đó
+  // `avoid identity drift` chính là công cụ CHỐNG TRÔI MẶT do hãng ghi ra — skill thợ video
+  // giờ dặn phải viết nó. Nếu ai đó nới VIDEO_LOCK_PATTERNS (VD bỏ dấu phẩy khỏi `[^.,;]*`,
+  // hoặc thêm mẫu bắt chữ "identity") thì mấy cụm này bị xén âm thầm: prompt vẫn ghi ra,
+  // test cũ vẫn xanh, chỉ có mặt là trôi. Khóa ở đây để hỏng thì hỏng ồn ào.
+  const AV = 'sharp focus, five fingers, avoid identity drift, avoid temporal flicker, avoid jitter'
+  const avOut = ensureVideoLock(AV, V)
+  ok('GIỮ `avoid identity drift` (khóa mặt chính hãng)', avOut.includes('avoid identity drift'))
+  ok('GIỮ `avoid temporal flicker`', avOut.includes('avoid temporal flicker'))
+  ok('GIỮ `avoid jitter`', avOut.includes('avoid jitter'))
+  ok('vẫn ghép câu khóa của app lên đầu', avOut.startsWith(lock))
+  ok('vẫn giữ ràng buộc kỹ thuật', avOut.includes('sharp focus') && avOut.includes('five fingers'))
+  ok('chạy 2 lần vẫn bất biến (không nhân bản `avoid`)', ensureVideoLock(avOut, V) === avOut)
 }
 
 console.log(`\n${fail === 0 ? '✅' : '❌'} ${pass} pass · ${fail} fail\n`)

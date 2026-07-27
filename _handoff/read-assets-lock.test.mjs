@@ -48,8 +48,16 @@ console.log('\n[1] read_assets phải ló ra ĐỦ hồ sơ, không chỉ 2 trư
   ok('anchor ghép bằng anchorLine (đúng thứ tự ANCHOR_ORDER)', /anchorLine\(t\.tag/.test(readAssets))
   ok(
     'chưa khóa thì identity_anchor để undefined (không trả chuỗi rỗng gây hiểu nhầm)',
-    /locked \? anchorLine\([\s\S]*?: undefined/.test(readAssets)
+    /identity_anchor:\s*locked\s*\?\s*anchorLine\([\s\S]*?:\s*undefined/.test(readAssets)
   )
+  // Chế độ TRỎ: asset đã có ảnh tư liệu thì anchorLine phải ghép dòng NGẮN (trỏ về ảnh),
+  // không tả lại ngũ quan. Cờ này lấy từ ref_image_path — quên truyền là im lặng quay về
+  // chế độ tả, prompt lại có 2 nguồn tả mặt đánh nhau.
+  ok(
+    'truyền cờ có-ảnh vào anchorLine (bật chế độ TRỎ)',
+    /anchorLine\(t\.tag,\s*a\?\.identity_lock,\s*!!t\.ref_image_path\)/.test(readAssets)
+  )
+  ok('ló ra anchor_mode để thợ biết vì sao dòng anchor ngắn', /anchor_mode:/.test(readAssets))
 }
 
 console.log('\n[2] Mô tả tool phải DẶN THẲNG: locked=true thì cứ ghi, cấm dừng')
@@ -74,8 +82,14 @@ console.log('\n[3] Luật gốc KHÔNG đổi — vẫn là "một ô cũng đ�
   )
   ok('KHÔNG có luật đếm số ô tối thiểu', !/\.filter\([\s\S]{0,60}\)\.length\s*>=\s*[23]/.test(anchorSrc))
   ok(
+    // `order` là ANCHOR_ORDER hoặc ANCHOR_ORDER_REF (chế độ trỏ) — điểm cần khóa là
+    // "map hết rồi filter ô rỗng", KHÔNG phải đòi ô nào cụ thể phải có.
     'anchorLine ghép mọi ô CÓ CHỮ, không đòi ô cụ thể',
-    /parts = ANCHOR_ORDER\.map\(\(k\) => l\[k\]\?\.trim\(\)\)\.filter/.test(anchorSrc)
+    /parts = order\.map\(\(k\) => l\[k\]\?\.trim\(\)\)\.filter/.test(anchorSrc)
+  )
+  ok(
+    'chế độ trỏ chỉ giữ signature + aura (bỏ mô tả ngũ quan cạnh tranh với ảnh)',
+    /ANCHOR_ORDER_REF = \['signature', 'aura'\]/.test(anchorSrc)
   )
   ok(
     'ensureAnchor vẫn là chốt chặn cuối trong write_image_prompt',

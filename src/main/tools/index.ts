@@ -28,7 +28,9 @@ import {
 } from './validators'
 import { scanCraft, readCraftFile } from '../core/craftRegistry'
 import { extractTags } from '../pipeline/tagGuard'
-import { anchorLine, ensureAnchor, hasLock } from '../../shared/anchor'
+// ⚠️ `extractTags` cố ý lấy từ `tagGuard` (dòng trên), KHÔNG lấy bản trong `anchor.ts`:
+// bản tagGuard bắt cả @tag có dấu gạch ngang và tự viết HOA, hợp với dữ liệu thật hơn.
+import { anchorLine, ensureAnchor, ensureVideoLock, hasLock } from '../../shared/anchor'
 
 /**
  * Nối 1 block → các asset nó dùng, gộp 2 nguồn:
@@ -193,7 +195,13 @@ const readAssets: ToolDef = {
         // Khối chữ app sẽ chèn NGUYÊN VĂN vào đầu mọi prompt ảnh của @tag này.
         // Thợ KHÔNG cần chép lại (write_image_prompt tự chèn), chỉ để BIẾT đã có gì
         // mà tránh tả chồng ở thân prompt.
-        identity_anchor: locked ? anchorLine(t.tag, a?.identity_lock) : undefined,
+        identity_anchor: locked
+          ? anchorLine(t.tag, a?.identity_lock, !!t.ref_image_path)
+          : undefined,
+        // ⭐ Nói THẲNG chế độ đang chạy. Thợ thấy dòng anchor ngắn bất thường (chỉ có câu
+        //    trỏ + nốt ruồi) mà không biết vì sao thì nó hay "tốt bụng" bù thêm mô tả ngũ
+        //    quan vào thân prompt — đúng thứ chế độ trỏ sinh ra để loại bỏ.
+        anchor_mode: locked ? (t.ref_image_path ? 'ref-pointer' : 'full-description') : undefined,
         appearance_hint: a?.gen_prompt ? a.gen_prompt.slice(0, 240) : undefined,
         has_ref_image: !!t.ref_image_path
       }
@@ -660,12 +668,26 @@ const writeVideoPrompt: ToolDef = {
   handler: (input, ctx) => {
     assertVideoPrompt(input)
     const tagNames = coerceTagList(input.tags)
+
+    // ⭐ CHỐT CHẶN CUỐI chống trôi mặt ở khâu VIDEO — đối xứng với ensureAnchor bên ảnh.
+    // Trước đây prompt ảnh được app ghép cứng khối [IDENTITY LOCK] nên 16 block giống hệt
+    // nhau, còn prompt video thì để THỢ TỰ VIẾT câu khóa → mỗi block một kiểu ("preserve
+    // face" / "stable consistent face" / "100% matches the reference") → vẫn trôi dù đã
+    // tốn cả GATE 2 khóa mặt. Giờ app gỡ câu thợ viết rồi ghép ĐÚNG MỘT câu chuẩn.
+    const assets = db.listAssetsFull(ctx.projectId)
+    const rawConstraints = (input.constraints as string) ?? ''
+    // Thợ không khai `tags` → trích từ chính prompt để vẫn khóa đúng người.
+    const lockTags = tagNames.length
+      ? tagNames
+      : extractTags(`${input.scene as string} ${input.motion as string} ${rawConstraints}`)
+    const constraints = ensureVideoLock(rawConstraints, assets, lockTags)
+
     const vp: VideoPrompt = {
       style: input.style as string,
       scene: input.scene as string,
       motion: input.motion as string,
       audio: (input.audio as string) ?? '',
-      constraints: (input.constraints as string) ?? '',
+      constraints,
       negative: (input.negative as string) ?? '',
       text_overlay: (input.text_overlay as string) ?? '',
       tags: db.resolveTags(ctx.projectId, tagNames)
