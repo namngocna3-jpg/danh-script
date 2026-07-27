@@ -6,7 +6,18 @@
 
 export interface QueueOptions {
   intervalMs?: number // giãn cách giữa 2 task (mặc định 800ms)
-  timeoutMs?: number // timeout mỗi task (mặc định 240s — bao trọn 180s fetch + lề)
+  /**
+   * Timeout TỔNG mỗi task — chỉ là LƯỚI CHẶN CUỐI, không phải cơ chế bắt treo chính.
+   *
+   * ⭐ Mặc định 240s TỪNG GIẾT OAN các lượt sinh dài: `maxTokens` là 16384, tốc độ thực
+   * tế qua cổng gom ~30–50 token/giây → một lượt ghi 3 block đầy đủ cần 5–9 PHÚT dù
+   * token vẫn chảy đều. Bị cắt ở 240s thì `isTransient` thấy chữ "timeout" nên thử lại
+   * tận 4 lần — mỗi lần lại chạy 4 phút rồi lại chết, tốn ~16 phút để rồi báo lỗi.
+   *
+   * Việc bắt treo THẬT đã do `streamToolTurn` lo bằng đồng hồ IM LẶNG 120s (chunk về là
+   * reset). Nên ở đây chỉ cần trần rộng 900s cho trường hợp tầng dưới sổng lưới.
+   */
+  timeoutMs?: number
   maxRetries?: number // số lần thử lại (mặc định 4 — 9router hay chờn 502/reset)
 }
 
@@ -64,7 +75,7 @@ export class TaskQueue {
 
   constructor(opts: QueueOptions = {}) {
     this.intervalMs = opts.intervalMs ?? 800
-    this.timeoutMs = opts.timeoutMs ?? 240_000
+    this.timeoutMs = opts.timeoutMs ?? 900_000
     this.maxRetries = opts.maxRetries ?? 4
   }
 

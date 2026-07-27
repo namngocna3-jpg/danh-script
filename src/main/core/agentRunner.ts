@@ -36,6 +36,40 @@ export interface RunAgentResult {
   steps: number
   toolCalls: Array<{ name: string; input: unknown; output: unknown }>
   messages: Array<{ role: string; content: unknown }> // toàn bộ lịch sử sau lượt chạy (để lưu chat-gate)
+  /**
+   * ⭐ TRUE = thợ bị CẮT vì chạm trần `maxSteps`, KHÔNG phải tự nói xong.
+   * Trước đây chạm trần là thoát im lặng: người dùng thấy "đã xong" trong khi mới ghi
+   * 9/16 block. Cổng gọi phải đọc cờ này để báo rõ + mời bấm chạy tiếp.
+   */
+  truncated: boolean
+}
+
+/**
+ * Bộ đếm id tool TOÀN CỤC (không reset mỗi lần gọi).
+ *
+ * VÌ SAO: `sanitizeToolHistory` từng đặt `let n = 0` NGAY TRONG hàm → mỗi lượt lại sinh
+ * đúng bộ `tu_0/tu_1/tu_2`. Cổng gom 9router chặn id trùng trong 24s, mà 2 lượt liên
+ * tiếp cách nhau chỉ vài giây → tái tạo lại đúng lỗi 400 mà chính hàm này sinh ra để
+ * phòng. Dùng bộ đếm tăng đơn điệu ở cấp module thì id không bao giờ đụng lại.
+ */
+let toolIdSeq = 0
+
+/**
+ * Lỗi giữa chừng nhưng CÓ MANG THEO lịch sử hội thoại tới thời điểm hỏng.
+ *
+ * VÌ SAO: chat-gate lưu lịch sử bằng `saveGateChat(...)` đặt SAU `await runAgent(...)`.
+ * Hỏng giữa chừng (mạng đứt, 400, chạm trần token) là lệnh lưu không bao giờ chạy →
+ * mất trắng cả cuộc hội thoại. Các block đã ghi thì vẫn còn (mỗi tool commit ngay),
+ * nhưng lượt sau thợ không nhớ đã bàn gì nên hay dựng lại từ đầu.
+ */
+export class AgentRunError extends Error {
+  constructor(
+    message: string,
+    readonly partialMessages: Array<{ role: string; content: unknown }>
+  ) {
+    super(message)
+    this.name = 'AgentRunError'
+  }
 }
 
 /**
@@ -68,8 +102,7 @@ function sanitizeToolHistory(
   // Hợp lệ = id xuất hiện ở CẢ tool_use lẫn tool_result.
   const valid = new Set([...useIds].filter((id) => resultIds.has(id)))
   const remap = new Map<string, string>()
-  let n = 0
-  for (const id of valid) remap.set(id, `tu_${n++}`)
+  for (const id of valid) remap.set(id, `tu_${toolIdSeq++}`)
 
   const out: Array<{ role: string; content: unknown }> = []
   for (const m of messages) {
@@ -101,15 +134,26 @@ function sanitizeToolHistory(
  * Trả text cuối + nhật ký tool.
  */
 export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
-  const maxSteps = opts.maxSteps ?? 12
-  const cfg = opts.cfg ?? defaultConfig()
-  const toolSchemas = schemasOf(opts.tools)
-
-  // Chat-gate: tiếp nối lịch sử lượt trước (nếu có) rồi thêm lời người dùng lượt này.
+  // Vỏ mỏng: mọi lỗi giữa chừng được gói lại KÈM lịch sử dở để cổng gọi còn lưu được.
   const messages: Array<{ role: string; content: unknown }> = [
     ...(opts.history ?? []),
     { role: 'user', content: opts.userPrompt }
   ]
+  try {
+    return await runAgentInner(opts, messages)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    throw new AgentRunError(msg, messages)
+  }
+}
+
+async function runAgentInner(
+  opts: RunAgentOptions,
+  messages: Array<{ role: string; content: unknown }>
+): Promise<RunAgentResult> {
+  const maxSteps = opts.maxSteps ?? 12
+  const cfg = opts.cfg ?? defaultConfig()
+  const toolSchemas = schemasOf(opts.tools)
   const toolCalls: RunAgentResult['toolCalls'] = []
   let finalText = ''
   let step = 0
@@ -121,6 +165,8 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
   // thẳng vào mặt nó: "lỗi này lặp lần thứ N rồi, ĐỔI CÁCH ĐI".
   const errStreak = new Map<string, number>()
   let loopBreak = ''
+  // Thợ TỰ dừng (hết việc / cắt vòng lặp lỗi) → false. Rơi ra khỏi while vì hết bước → true.
+  let finishedOnItsOwn = false
 
   while (step < maxSteps) {
     step++
@@ -185,6 +231,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
     if (turn.stopReason !== 'tool_use' || turn.toolUses.length === 0) {
       if (turn.rawContent.length) messages.push({ role: 'assistant', content: turn.rawContent })
       opts.onStep?.({ step, kind: 'done', detail: finalText.slice(0, 200) })
+      finishedOnItsOwn = true
       break
     }
 
@@ -238,7 +285,15 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
             `Việc đã ghi được trước đó vẫn giữ nguyên. Hãy gửi nguyên văn lỗi này cho người phát triển, hoặc nhắn lại yêu cầu để thợ thử cách khác.`
         }
       }
-      if (!isError) errStreak.clear()
+      // ⭐ Chỉ xóa chuỗi lỗi CỦA CHÍNH tool này, KHÔNG xóa cả Map.
+      //    `clear()` làm hỏng bộ đếm khi 1 lượt gọi nhiều tool song song: tool A lỗi lần 3,
+      //    tool B ngay sau đó chạy ngon → xóa sạch → A lại đếm từ 1 → cắt-vòng-lặp không
+      //    bao giờ chạm ngưỡng 4, thợ lặp mãi tới hết trần bước.
+      //    Key = `tên::thông báo` nên phải quét theo tiền tố tên tool.
+      if (!isError) {
+        const prefix = `${use.name}::`
+        for (const k of [...errStreak.keys()]) if (k.startsWith(prefix)) errStreak.delete(k)
+      }
       toolCalls.push({ name: use.name, input: use.input, output })
       opts.onStep?.({
         step,
@@ -260,9 +315,24 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
     if (loopBreak) {
       finalText = loopBreak
       opts.onStep?.({ step, kind: 'done', detail: 'Cắt vòng lặp: tool lỗi lặp lại' })
+      finishedOnItsOwn = true
       break
     }
   }
 
-  return { finalText, steps: step, toolCalls, messages }
+  // ⭐ CHẠM TRẦN BƯỚC — trước đây thoát IM LẶNG. Ca thật: 16 block, skill dặn ghi ≤3
+  //    block/lượt → cần ~7 lượt ghi + đọc; trần 14 hết sạch ở block thứ 9. Người dùng
+  //    đọc câu chốt của thợ tưởng đã xong, thực ra thiếu 7 block. Phải nói thẳng.
+  const truncated = !finishedOnItsOwn
+  if (truncated) {
+    const note =
+      `⚠️ CHƯA XONG — thợ đã dùng hết ${maxSteps} lượt cho phép nên app phải dừng.\n` +
+      `Mọi thứ đã ghi được vẫn giữ nguyên trong dự án (không mất).\n` +
+      `Hãy bấm "▶ Bắt đầu" / gửi lại một lượt nữa: thợ sẽ đọc coverage rồi viết tiếp đúng phần còn thiếu.`
+    finalText = finalText ? `${finalText}\n\n${note}` : note
+    console.warn(`[AGENT] chạm trần maxSteps=${maxSteps} — trả về truncated=true`)
+    opts.onStep?.({ step, kind: 'done', detail: 'Chạm trần lượt — chưa xong' })
+  }
+
+  return { finalText, steps: step, toolCalls, messages, truncated }
 }

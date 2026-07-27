@@ -282,6 +282,13 @@ async function streamToolTurn(
     } else if (t === 'message_delta') {
       const sr = ev.delta?.stop_reason
       if (typeof sr === 'string') stopReason = sr
+    } else if (t === 'error') {
+      // ⭐ Nhà cung cấp báo lỗi GIỮA stream (quá tải, hết hạn mức, nội dung bị chặn).
+      //    Trước đây nhánh này KHÔNG tồn tại → sự kiện bị nuốt, stopReason ở nguyên chuỗi
+      //    rỗng, agentRunner thấy `!== 'tool_use'` nên tưởng "thợ nói xong" và thoát êm
+      //    trong khi tool_use đang dở chưa chạy. Ném ra để hàng đợi còn thử lại được.
+      const detail = ev.error?.message ?? ev.error?.type ?? JSON.stringify(ev.error ?? ev)
+      throw new Error(`Nhà cung cấp báo lỗi giữa luồng: ${detail}`)
     }
   }
 
@@ -303,11 +310,15 @@ async function streamToolTurn(
         const p = line.slice(5).trim()
         if (!p || p === '[DONE]') continue
         sawData = true
+        let ev: unknown
         try {
-          handle(JSON.parse(p))
+          ev = JSON.parse(p)
         } catch {
-          /* dòng SSE lẻ/chưa trọn → bỏ */
+          continue /* dòng SSE lẻ/chưa trọn → bỏ */
         }
+        // ⚠️ handle() ở NGOÀI try-parse: lỗi do nhà cung cấp báo (sự kiện `error`) phải
+        //    được ném lên, KHÔNG bị catch "bỏ dòng hỏng" nuốt mất.
+        handle(ev)
       }
     }
   } finally {
@@ -316,24 +327,35 @@ async function streamToolTurn(
 
   // Cổng gom PHỚT stream (trả nguyên cục JSON, không có "data:") → parse như non-stream.
   if (!sawData) {
-    const json = JSON.parse(fullRaw) as {
-      content?: Array<Record<string, unknown>>
-      stop_reason?: string
+    // ⭐ `JSON.parse` TRẦN từng làm hỏng cả lượt: cổng gom trả HTML lỗi (502 Bad Gateway,
+    //    trang Cloudflare) thì đây ném `SyntaxError` — mà `isTransient()` không nhận ra
+    //    SyntaxError nên hàng đợi KHÔNG thử lại, lỗi khó hiểu đập thẳng vào mặt người dùng.
+    //    Gói lại thành lỗi mạng có mô tả để được thử lại như 502 bình thường.
+    let json: { content?: Array<Record<string, unknown>>; stop_reason?: string }
+    try {
+      json = JSON.parse(fullRaw)
+    } catch {
+      throw new Error(
+        `Nhà cung cấp trả về dữ liệu không phải JSON (có thể là trang lỗi 502/timeout của cổng gom). ` +
+          `120 ký tự đầu: ${fullRaw.slice(0, 120).replace(/\s+/g, ' ')}`
+      )
     }
     const content = json.content ?? []
+    const nsToolUses = content
+      .filter((c) => c.type === 'tool_use')
+      .map((c) => ({
+        id: c.id as string,
+        name: c.name as string,
+        input: (c.input as Record<string, unknown>) ?? {}
+      }))
     return {
       text: content
         .filter((c) => c.type === 'text')
         .map((c) => (c.text as string) ?? '')
         .join(''),
-      toolUses: content
-        .filter((c) => c.type === 'tool_use')
-        .map((c) => ({
-          id: c.id as string,
-          name: c.name as string,
-          input: (c.input as Record<string, unknown>) ?? {}
-        })),
-      stopReason: json.stop_reason ?? '',
+      toolUses: nsToolUses,
+      // Thiếu stop_reason mà có tool_use thì đích thị là 'tool_use' (xem chú thích cuối hàm).
+      stopReason: json.stop_reason ?? (nsToolUses.length ? 'tool_use' : ''),
       rawContent: content
     }
   }
@@ -358,6 +380,10 @@ async function streamToolTurn(
       rawContent.push({ type: 'tool_use', id: b.id, name: b.name, input })
     }
   }
+  // ⭐ Vá `stopReason` rỗng: một số cổng gom không gửi `message_delta` nên stop_reason ở
+  //    nguyên chuỗi rỗng. agentRunner so `!== 'tool_use'` → tưởng thợ đã xong và thoát,
+  //    bỏ luôn các tool_use vừa nhận. Có tool_use thì đích thị là 'tool_use'.
+  if (!stopReason && toolUses.length) stopReason = 'tool_use'
   return { text, toolUses, stopReason, rawContent }
 }
 

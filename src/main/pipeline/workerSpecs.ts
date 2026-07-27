@@ -53,7 +53,10 @@ export const WORKER_SPECS: Record<string, WorkerSpec> = {
       'read_assets',
       'read_coverage',
       'save_asset',
-      'write_image_prompt'
+      'write_image_prompt',
+      // ⭐ Lá chắn #3 chống trôi mặt — skill dạy gọi ở bước cuối, phải cấp ở CẢ 2 đường.
+      //    Thiếu ở đây thì đường 1-phát gọi tool không tồn tại → error → cháy lượt.
+      'check_identity_drift'
     ],
     layers: [
       'style-constitution.md',
@@ -67,11 +70,17 @@ export const WORKER_SPECS: Record<string, WorkerSpec> = {
   vidPrompter: {
     tools: [
       'read_ideal',
+      // ⭐ read_plan: chuyển cảnh (transition) + nhịp từng cảnh do directorPlanner thiết kế
+      //    nằm trong director_plan. Thiếu tool này thì cả một cổng Đạo diễn không tới tay
+      //    thợ video → motif chuyển cảnh xuyên phim mất trắng.
+      'read_plan',
       'read_scenes',
       'read_blocks',
       'read_assets',
       'read_coverage',
-      'write_video_prompt'
+      'write_video_prompt',
+      // ⭐ Lá chắn #3 bản video — skill bước 6 bắt buộc gọi, phải cấp ở CẢ 2 đường.
+      'check_video_drift'
     ],
     layers: [
       'style-constitution.md',

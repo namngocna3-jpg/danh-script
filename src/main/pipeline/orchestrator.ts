@@ -4,7 +4,7 @@
 // Sếp KHÔNG có tool ghi cảnh/prompt — chỉ điều phối + đọc trạng thái + gọi duyệt.
 // _decision.md bắt Sếp DỪNG chờ người dùng mỗi cổng ⇒ 1 lượt chat ≈ 1 cổng.
 // ============================================================
-import { runAgent, type AgentStep } from '../core/agentRunner'
+import { runAgent, AgentRunError, type AgentStep } from '../core/agentRunner'
 import { readSkill, composeSystem, injectStyleAnchor } from '../core/skillLoader'
 import { findTool, ALL_TOOLS, type ToolDef } from '../tools'
 import { getProject, loadGateChat, saveGateChat } from '../db'
@@ -125,16 +125,25 @@ export async function runOrchestrator(
   }>
   const userTurn = userMessage ?? KICKOFF
 
-  const result = await runAgent({
-    system,
-    userPrompt: userTurn,
-    tools: orchestratorTools(projectId, onStep),
-    ctx: { projectId },
-    history,
-    maxSteps: 16,
-    temperature: 0.5,
-    onStep
-  })
+  let result: Awaited<ReturnType<typeof runAgent>>
+  try {
+    result = await runAgent({
+      system,
+      userPrompt: userTurn,
+      tools: orchestratorTools(projectId, onStep),
+      ctx: { projectId },
+      history,
+      maxSteps: 16,
+      temperature: 0.5,
+      onStep
+    })
+  } catch (e) {
+    // Lỗi giữa chừng vẫn giữ lại lịch sử đã bàn — xem comment ở gateChat.ts.
+    if (e instanceof AgentRunError && e.partialMessages.length) {
+      saveGateChat(projectId, 'orchestrator', e.partialMessages)
+    }
+    throw e
+  }
 
   saveGateChat(projectId, 'orchestrator', result.messages)
   return { reply: result.finalText }
