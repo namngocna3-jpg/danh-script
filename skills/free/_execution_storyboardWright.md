@@ -27,3 +27,23 @@ shot_size · camera_angle · camera_move · subject(@tag) · action_start → ac
 - ❌ Không tự sinh prompt ảnh/video (việc bước sau).
 - ❌ Không đổi narration/đạo diễn (chỉ phân cảnh, không viết lại chuyện).
 - ❌ Không nhồi >8s/shot; không bịa @tag.
+
+---
+
+## Lưu ý & Tự kiểm (không xuất ra)
+
+> Bước này là **bản vẽ thi công** của cả hai cổng Prompt. Sai ở đây thì thợ ảnh và thợ video
+> cùng sai theo, mà lúc đó không ai truy ngược về đây nữa.
+
+- [ ] Đã đọc ĐỦ 4 nguồn (`read_plan` + `read_script_full` + `read_scenes` + `read_assets`) TRƯỚC khi chia shot chưa? Chia shot mà chưa đọc `read_assets` là chắc chắn bịa @tag.
+- [ ] **MỌI cảnh** đã có `write_shot_panel` chưa — hay bỏ sót cảnh cuối? (đếm lại theo `read_scenes`)
+- [ ] Mọi `@tag` trong `subject`/`asset_tags` đều **có thật** trong `read_assets`? Gõ sai một chữ = asset mồ côi, prompt mất ảnh tư liệu → trôi mặt.
+- [ ] `asset_tags` khai **đủ** người/vật xuất hiện trong shot chưa? Thiếu thì app không chèn được hồ sơ mặt của người đó.
+- [ ] Mọi `duration_sec` **≤8**? (5–8s là mốc Seedance hay vỡ — dài hơn phải tách shot)
+- [ ] `action_start` và `action_end` **khác nhau thật sự** chứ không chép lại nhau? Hai ô giống nhau = shot đứng hình, thợ video không có gì để làm động.
+- [ ] `action_end` có **1 chi tiết vật lý nhân-quả** (weight shift/uncoil/momentum) chưa, hay chỉ là động từ trần ("chạy", "cầm", "vung")?
+- [ ] `shot_size` và `camera_move` có **hợp nhau** không? `extreme wide` + `macro orbit` là mâu thuẫn; `close-up` + `whip pan` thì mặt nhòe.
+- [ ] Nhịp có **đổi** giữa các shot không — hay 12 shot đều `medium · eye-level · static`? Đơn điệu là lỗi phân cảnh, không phải lỗi thợ prompt.
+- [ ] Shot có ≥2 người/vật cần vị trí cố định → đã ghi `layout` chưa? (thiếu map thì Seedance cho vật "teleport")
+- [ ] Hướng nhìn/vị trí trái-giữa-phải của nhân vật có **nhất quán** giữa các shot liền kề không? Đổi bên mà không có động tác quay = nhảy trục 180°.
+- [ ] Có lỡ viết **prompt** (chữ tiếng Anh cho engine) vào `notes` không? `notes` là ý đồ cho người, prompt là việc của bước sau.

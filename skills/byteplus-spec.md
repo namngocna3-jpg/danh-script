@@ -23,12 +23,23 @@ Phân công điều khiển theo modality:
 |---|---|---|
 | Độ dài 1 lần sinh | ~4–15 s | **30 s liền mạch 1-pass** |
 | Tham chiếu | 9 ảnh · 3 video · 3 audio (≤12 file) | **tới 50 input đa mô thức** |
-| Độ phân giải | tới 2K | **native 4K** |
+| Độ phân giải | tới **4K / 10-bit** | (hãng **chưa công bố** trần riêng — xem ghi chú) |
 | Audio | native (lip-sync 8+ ngôn ngữ) | **native đồng bộ (sinh cùng latent)** |
 | Sửa cục bộ | — | **region-level editing** (sửa 1 vùng khung, không sinh lại cả clip) |
-| Máy quay | tốt | **director-grade camera control** |
+| Máy quay | tốt | **director-grade camera control** + blockout 3D (white-model) |
+| Bám prompt | chuẩn | **~+20%** so với 2.0 |
+| Ngôn ngữ | 8+ | 11 |
 
-> Cap kỹ thuật: prompt **≤ 3000 ký tự**. Coco/BytePlus mặc định 720p, 9:16, ~15 s (2.0). App vẫn cắt block ≤15 s ở GATE 1 để an toàn mọi model.
+> ⚠️ **Ghi chú độ phân giải (đã hạ tuyên bố).** Bản cũ ghi 2.5 là "native 4K" — **không có nguồn**.
+> Mốc **4K/10-bit** gắn rõ với **Seedance 2.0**; với 2.5, ByteDance **chưa công bố riêng trần độ
+> phân giải** (theo CineD). Đừng viết prompt kỳ vọng 4K ở 2.5 rồi đổ lỗi cho prompt khi ra 2K —
+> thực tế đầu ra do Coco/BytePlus cấu hình, không do chữ trong prompt.
+>
+> ⚠️ **30 s là NĂNG LỰC ENGINE, KHÔNG phải chỉ tiêu viết.** App vẫn cắt block **≤8 s** ở GATE 1
+> (validator chặn cứng) vì nhịp kể và vì Seedance hay hỏng ở khúc 5–8 s. Viết timeline 15 s cho
+> block 8 s thì hành động bị nén cụt.
+
+> Cap kỹ thuật: prompt **≤ 3000 ký tự** (nhưng đích là **60–100 từ** — mục 1). Coco/BytePlus mặc định 720p, 9:16, ~15 s (2.0).
 
 ---
 
@@ -39,26 +50,79 @@ Seedance hiểu tốt **câu văn đủ ngữ pháp** (như tả cảnh cho đ�
 - ✅ ĐÚNG: *"A chef in a white uniform chops vegetables with rhythmic knife movements, filmed in a static medium shot from a slightly elevated angle."*
 - ❌ SAI (tag soup): *"chef, white uniform, chopping, knife, medium shot, elevated angle, kitchen, photorealistic, 8k, masterpiece"*
 
-Giới hạn thực dụng: **≤ 250 từ/prompt** (dưới xa cap 3000 ký tự), tập trung, không lan man.
+### ⭐ NGÂN SÁCH CHỮ — 60–100 từ là ĐÍCH, không phải mức tối thiểu
+
+> ⚠️ **ĐÍNH CHÍNH.** Mục này từng ghi "≤250 từ" — **quá rộng gấp đôi**. Hướng dẫn prompt
+> **chính thức của Seedance** nêu rõ: nhắm **60–100 từ**; quá **150 từ** bắt đầu loãng;
+> **200+ từ** thì chính các chỉ thị quan trọng bị pha loãng và model bắt đầu bỏ qua.
+
+| Mức | Đánh giá |
+|---|---|
+| **60–100 từ** | ⭐ ĐÍCH NGẮM — mọi chỉ thị còn nguyên trọng số |
+| 100–150 từ | chấp nhận được nếu block thật sự phức tạp (multi-shot, nhiều @tag) |
+| >150 từ | ⛔ TRẦN — bắt đầu loãng, phải cắt |
+| >200 từ | ❌ chỉ thị quan trọng bị model bỏ qua |
+
+Cap engine là 3000 ký tự, nhưng **cap ≠ đích**. Prompt dài không "nói rõ hơn", nó **chia mỏng
+sự chú ý của model** — mỗi chữ thêm vào làm mọi chữ khác nhẹ đi. Đây chính là lý do câu khóa
+danh tính viết ba biến thể lại khóa **yếu hơn** viết một lần.
+
+**Cắt gì khi quá trần (theo thứ tự):** ① thông số máy trong prompt VIDEO (`85mm`, `f/1.4` —
+engine video không đọc) → ② tả lại thứ đã đứng yên trong ảnh khung đầu → ③ tính từ trang trí
+(`beautiful`, `stunning`, `masterpiece`) → ④ cụm `avoid` trùng ý với câu khẳng định.
+**KHÔNG cắt:** câu gán vai @tag, `@Image1 as the first frame;`, ràng buộc bố trí.
 
 **⭐ Trọng số phần đầu:** Seedance đọc nặng nhất phần MỞ ĐẦU prompt → **đặt Subject trước tiên**.
 
 ---
 
-## 2 · CÔNG THỨC 6 PHẦN (thứ tự chuẩn)
+## 2 · CÔNG THỨC — THỨ TỰ CHÍNH THỨC
 
 ```
-[Subject] → [Motion] → [Camera] → [Environment] → [Lighting] → [Style]
+[Subject] → [Action] → [Environment] → [Camera] → [Style] → [Constraints]
+                            ↑
+                     + [Lighting] cài vào đây
 ```
+
+**Khuôn mẫu chính thức (nguyên văn tài liệu Seedance):**
+```
+[Subject], [Action], in [Environment], camera [Camera Movement], style [Style], avoid [Constraints]
+```
+
+> ⚠️ **ĐÍNH CHÍNH THỨ TỰ.** Bản cũ ghi `Subject → Motion → Camera → Environment → Lighting → Style`
+> — đảo **Camera lên trước Environment** và **để Constraints ra ngoài công thức**. Thứ tự chính
+> thức là **Environment TRƯỚC Camera**: tả xong *ai · làm gì · ở đâu* rồi mới nói *quay thế nào*.
+> Vì Seedance đọc nặng phần đầu, đẩy Camera lên sớm là **lấy trọng số của nội dung cho kỹ thuật**.
 
 1. **Subject** — chủ thể + đặc điểm nổi bật (nhúng `@tag`). Nét nổi bật giúp định vị: "an elderly man", "a girl with glasses".
-2. **Motion** — hành động chính, động từ cụ thể + degree adverb (mục 3).
-3. **Camera** — cỡ cảnh + góc + kiểu chuyển động máy (mục 4).
-4. **Environment** — bối cảnh/nơi chốn (từ lớp B: era/setting/props).
-5. **Lighting** — nguồn sáng + chất sáng + không khí (từ craft-photography lớp ánh sáng).
-6. **Style** — `{{STYLE_ANCHOR}}` + độ nét. **NGẮN NHẤT** trong 6 phần.
+2. **Action** — hành động chính, động từ cụ thể + degree adverb (mục 3). ⚠️ Chỉ hành động **của chủ thể** — chuyển động MÁY để riêng ở bước 4 (xem luật tách câu dưới).
+3. **Environment** — bối cảnh/nơi chốn (từ lớp B: era/setting/props) **+ ⭐ LIGHTING**.
+4. **Camera** — cỡ cảnh + góc + động tác máy (mục 4). **Câu RIÊNG.**
+5. **Style** — `{{STYLE_ANCHOR}}` + độ nét. **NGẮN NHẤT** trong các phần.
+6. **Constraints** — ràng buộc kỹ thuật/bố trí + đuôi `avoid ...` (mục 10).
 
-> Ảnh khung đầu (imgPrompter) dùng phần 1,3,4,5,6 (bỏ Motion). Video (vidPrompter) dùng đủ 6.
+### ⭐ LIGHTING — bổ sung có ĐÒN BẨY CAO NHẤT
+
+Tài liệu chính thức xếp **ánh sáng là thứ đáng thêm nhất** khi muốn nâng chất lượng một prompt
+đã đủ ý. Lý do: ánh sáng quyết định **khối · chiều sâu · không khí** cùng lúc — ba thứ mà thêm
+tính từ (`beautiful`, `cinematic`) không mua được. Một prompt 80 từ **có ánh sáng cụ thể** đánh
+bại một prompt 150 từ chỉ có tính từ.
+
+- ✅ `warm late-afternoon sunlight raking through the window from the left, long soft shadows`
+- ❌ `beautiful lighting`, `cinematic lighting` (rỗng — không nói nguồn, hướng, chất)
+
+Bảng nguồn sáng/thời điểm/không khí: **craft-photography mục 4**.
+
+### ⛔ LUẬT TÁCH CÂU — lỗi SỐ 1 theo tài liệu chính thức
+
+Chuyển động **CHỦ THỂ** và chuyển động **MÁY** phải nằm ở **HAI CÂU RIÊNG**. Gộp chung thì
+engine không phân biệt được ai đang di chuyển → nó nhòe cả hai, hoặc chọn bừa một.
+
+- ❌ Sai: `she turns while the camera dollies in around her`
+- ✅ Đúng: `She turns her head slowly toward the window. Camera dollies in steadily on her face.`
+
+> Ảnh khung đầu (imgPrompter) bỏ **Action** (ảnh tĩnh) và bỏ luật tách câu (không có chuyển
+> động máy) — dùng 1,3,4,5,6. Video (vidPrompter) dùng đủ.
 
 ### 2a · ⭐ ĐÍCH CUỐI = 1 ĐOẠN ENGLISH LIỀN MẠCH (không phải bảng nhãn)
 
@@ -180,18 +244,39 @@ Seedance KHÔNG "đoán" vai trò của file tham chiếu — **phải GÁN VAI 
 - `video rhythm references @Video1`
 - `BGM references @Audio1` · `sound effects reference @Video3's audio`
 
+**⭐ Dạng gán vai NGẮN (nguyên văn tài liệu chính thức — ưu tiên dùng, tiết kiệm chữ):**
+| Vai | Câu chính thức |
+|---|---|
+| Nhân vật | `@Image1 as character reference` |
+| Bối cảnh/nền | `@Image1 as background environment` |
+| Phong cách | `@Image1 as style reference` |
+| Động tác máy | `follow @Video1 camera movement` |
+| Nhịp dựng | `match @Video1 pacing and cuts` |
+| Âm nền | `@Audio1 as ambient sound` |
+
+> Dạng ngắn này ngắn hơn dạng sở hữu cách (`@Image1's character as the subject`) vài từ mỗi
+> lần — trong ngân sách 60–100 từ thì đó là chỗ cho một câu ánh sáng.
+
 **Kết hợp nhiều tham chiếu trong 1 prompt (mẫu):**
 ```
-@Image1's character as the subject, scene references @Image2,
-reference @Video1's camera movement and pacing, BGM references @Audio1
+@Image1 as character reference, @Image2 as background environment,
+follow @Video1 camera movement, @Audio1 as ambient sound
 ```
 
-**Câu khóa nhất quán** (kèm sau khi gán vai):
+**Câu khóa nhất quán:** ⚠️ **APP TỰ GHÉP — thợ KHÔNG viết.** `ensureVideoLock` gỡ mọi biến thể
+thợ viết rồi chèn **đúng một** câu chuẩn giống hệt nhau ở mọi block. Xem `_execution_vidPrompter.md`
+mục #1bis. Câu chuẩn app dùng:
 ```
-same character as @LAN, preserve face and outfit exactly, stable face, natural anatomy
+preserve @LAN face and outfit exactly as in the first frame with natural anatomy
 ```
 - Seedance 2.5 dùng bộ tham chiếu này để **khóa nhân vật/sản phẩm/style xuyên suốt cú quay** (tới 50 input).
 - App map @TAG → ảnh tư liệu ở bảng GATE 4; vidPrompter truyền mảng `tags`.
+
+**Chất lượng ảnh tham chiếu (tài liệu chính thức):**
+- **2–4 tham chiếu MẠNH thắng nhiều tham chiếu yếu.** Nhồi 10 ảnh mờ/mâu thuẫn làm model phải hòa giải → ra thứ ở giữa, không giống cái nào.
+- Ảnh tham chiếu nên **≥1080p**. Ảnh nén vỡ làm mất chi tiết danh tính (nốt ruồi, sẹo).
+- **Tham chiếu KHÔNG được mâu thuẫn với chữ.** Ảnh mặc áo đỏ mà prompt ghi "blue jacket" → engine chọn bừa.
+- Giữ **cùng tỉ lệ khung** cho cả chuỗi block.
 
 > ⚠️ BytePlus/Dreamina **chặn khuôn mặt người thật nhận dạng được** ở một số chế độ — với chân dung thật, dựa vào ảnh tham chiếu @tag + để Coco xử eKYC/consent, đừng tả mặt danh tính bằng lời.
 
@@ -203,15 +288,129 @@ Bản đồ ngôn ngữ ghim vị trí tốt hơn mười câu tả — "a map h
 
 ---
 
+## 8bis · ⭐ NỐI KHUNG, NỐI CLIP, ONE-TAKE, TIMECODE — CƠ CHẾ CHỐNG TRÔI MẠNH NHẤT
+
+> Đây là nhóm cơ chế **chính thức** mà app đang chưa khai thác. Trong đó **nối khung** là kỹ thuật
+> chống trôi nhân vật số **#3** của hãng — và là thứ hợp nhất với ca "đã đính ảnh mà mặt vẫn trôi".
+
+### A. NỐI KHUNG (frame-chaining) — khung CUỐI clip N = ảnh MỞ clip N+1
+
+Ba kỹ thuật chống trôi nhân vật chính thức, xếp theo thứ tự:
+1. **Ảnh tham chiếu nhân vật** — `@Image1 as character reference` (app đã dùng).
+2. **Nhắc lại đặc điểm bằng chữ** — ⚠️ **đọc kỹ, đây là chỗ hai hướng dẫn chính thức nghe như chỏi nhau.**
+
+   > Kỹ thuật #2 bảo *"vẫn nhắc lại ngoại hình bằng chữ (`same red jacket, short black hair`)"*.
+   > Nhưng mục 7 (image-to-video) lại bảo *"đừng tả lại thứ đã thấy trong ảnh"*.
+   >
+   > **Hòa giải:** khác nhau ở **liều lượng và loại tham chiếu**, không phải mâu thuẫn.
+   >
+   > | Tham chiếu là gì | Nhắc lại bằng chữ? |
+   > |---|---|
+   > | **Khung đầu của chính clip đó** (`@Image1 as the first frame`) | ❌ **KHÔNG** — engine đang nhìn thẳng vào nó. Tả lại = nguồn thứ hai cạnh tranh → mặt thứ ba. |
+   > | **Character reference dùng lại xuyên nhiều block** | ✅ **CÓ, nhưng LIỀU NHẸ** — 1–2 đặc điểm ổn định nhất, không phải bản mô tả 8 mục. |
+   >
+   > **App làm gì:** đúng cột thứ hai. Khi @tag đã có ảnh tư liệu, `anchorLine` chuyển sang
+   > **chế độ TRỎ** — bỏ tuổi/mặt/ngũ quan/tóc/dáng/trang phục, chỉ giữ **`signature`**
+   > (nốt ruồi/sẹo — ảnh nén JPEG hay làm mất, chữ BÙ cho ảnh) và **`aura`** (chi phối biểu cảm,
+   > không cạnh tranh hình dáng). Đó chính là "liều nhẹ" mà kỹ thuật #2 nói tới.
+   > **Đừng nới chế độ TRỎ trở lại 8 ô** vì đọc kỹ thuật #2 rồi tưởng app làm sai — nới là quay
+   > lại đúng lỗi cũ: đính ảnh mà mặt vẫn trôi.
+3. ⭐ **NỐI KHUNG** — xuất **khung hình cuối cùng** của clip N, nạp làm **ảnh khung đầu** của clip N+1.
+
+Vì sao mạnh nhất: clip N+1 không "đoán lại" khuôn mặt từ chữ nữa — nó **bắt đầu từ đúng pixel**
+khuôn mặt mà clip N vừa kết thúc. Sai số không cộng dồn qua từng block; nó bị **reset về 0** ở mỗi mối nối.
+
+**Quy trình cho người dùng (Coco/Seedance):**
+```
+Block 1: ảnh khung đầu (Seedream) → render video
+         → tua tới hình cuối, chụp/xuất frame cuối  ← ẢNH NÀY
+Block 2: nạp ảnh vừa xuất làm khung đầu → render video
+         → lại xuất frame cuối → Block 3 …
+```
+- Chỉ nối trong **cùng một cảnh** (cùng bối cảnh · cùng ánh sáng · cùng trang phục). Sang cảnh mới đổi bối cảnh thì quay lại dùng ảnh Seedream mới.
+- Khung cuối phải **rõ mặt** — nếu block kết ở lưng/xa thì đừng nối, dùng lại ảnh Seedream.
+- Giữ **cùng tỉ lệ khung** cho cả chuỗi.
+
+### B. NỐI CLIP bằng cú pháp `Continue from` (khi engine hỗ trợ nhận video input)
+```
+Continue from @Video1.
+Extend @Video1 forward by 5s.
+```
+- Chuỗi **3–6 lần nối** giữ được nhất quán; dài hơn bắt đầu trôi.
+- Prompt của đoạn nối chỉ tả **cái gì tiếp diễn**, KHÔNG tả lại nhân vật/bối cảnh (đã có trong video nguồn).
+
+### C. ONE-TAKE — cấm engine tự cắt cảnh
+Seedance hay tự chèn cắt cảnh giữa chừng → mỗi lát cắt là một cơ hội trôi mặt. Câu chốt cuối prompt:
+```
+No scene cuts throughout, one continuous shot.
+```
+Bổ sung khi thấy nháy chuyển cảnh: `no fade-in/fade-out, no transitions`.
+> ⚠️ Với app này (block ngắn ≤8s, mỗi block một cú quay) thì **one-take gần như luôn đúng** — nên
+> ghi mặc định cho mọi block, trừ khi block cố ý cần nhiều góc.
+
+### D. KHỐI SHOT CÓ TIMECODE (chỉ cho block dài / cần nhiều nhịp)
+```
+[00:00-00:03] Shot 1: @LAN pushes the door open, camera holds still.
+[00:03-00:06] Shot 2: close-up on her hands, camera tilts down slowly.
+```
+- Nếu muốn nhiều góc trong một block: `Natural multi-camera coverage with shot-reverse-shot editing`.
+- ⛔ **Timecode và one-take loại trừ nhau** — chọn một. Block ≤8s thường chọn one-take.
+
+### E. NEO STYLE VÀO **TRUYỀN THỐNG CÓ TÊN**, đừng dùng tính từ
+Tính từ (`cinematic`, `beautiful`, `epic`) rỗng nghĩa với engine. Tên riêng thì đặc.
+| ❌ Tính từ | ✅ Truyền thống có tên |
+|---|---|
+| `cinematic look` | `shot on Kodak Portra 400`, `Fuji Eterna stock` |
+| `moody lighting` | `Roger Deakins-style hard key with deep falloff` |
+| `retro vibe` | `1970s anamorphic 2.39:1 with visible halation` |
+| `graded nicely` | `DaVinci teal-orange grade, lifted blacks` |
+Chọn **một** neo, đừng chồng ba bốn tên (chúng đánh nhau).
+
+### F. THỨ TỰ CHO PROMPT DÀI (shot-script nâng cao)
+Khi block phức tạp, tài liệu chính thức xếp:
+```
+【Style】neo truyền thống  →  【Duration】  →  các shot có timecode  →  ràng buộc nhất quán + vật lý ở CUỐI
+```
+Ngược với thứ tự thường (Style cuối) — vì ở prompt dài, style phải đứng đầu để phủ lên toàn bộ shot bên dưới.
+Block ngắn thông thường **vẫn dùng thứ tự chuẩn ở mục 2**.
+
+---
+
 ## 9 · NHẤT QUÁN TRANG PHỤC (lưu ý lớp B)
 
 Câu khóa dùng `consistent outfit **within the scene**` — trang phục giữ nguyên TRONG CÙNG một cảnh. Đổi trang phục giữa các cảnh khác thời đại là ĐÚNG (do lớp B `scene_context`), KHÔNG phải lỗi. Đừng khóa cứng trang phục toàn dự án.
 
 ---
 
-## 10 · NEGATIVE → POSITIVE (Seedance KHÔNG đọc negative!)
+## 10 · RÀNG BUỘC "CẤM" — KHÔNG CÓ *TRƯỜNG* NEGATIVE, NHƯNG CÓ *CÚ PHÁP* `avoid`
 
-Manual 2.x **không có trường negative** — `--no blur` vô tác dụng. Chuyển mọi ý "cấm" thành **câu khẳng định** ghi vào trường `constraints`:
+> ⚠️ **ĐÍNH CHÍNH (theo hướng dẫn prompt chính thức Seedance).** Trước đây mục này ghi
+> "Seedance KHÔNG đọc negative" — **nói quá**. Sự thật có hai vế, phải tách bạch:
+>
+> 1. **KHÔNG có TRƯỜNG negative riêng.** Manual 2.x không nhận tham số `--no blur` hay ô
+>    negative tách rời. Vế này **đúng** — nên app vẫn coi trường `negative` là dự phòng.
+> 2. **NHƯNG cú pháp `avoid ...` VIẾT TRONG PROMPT thì engine ĐỌC.** Tài liệu chính thức
+>    dùng nó làm phần cuối của công thức chuẩn (`… avoid [Constraints]`) và liệt kê sẵn
+>    các cụm: `avoid jitter` · `avoid bent limbs` · `avoid temporal flicker` ·
+>    **`avoid identity drift`** · `avoid chaotic composition`. Tài liệu còn có khối
+>    `Prohibited:` dạng liệt kê cho shot-script nâng cao.
+>
+> **Vì sao đính chính này QUAN TRỌNG, không chỉ là học thuật:** `avoid identity drift` là
+> **công cụ chống trôi mặt do chính hãng ghi ra** — mà bản cũ của mục này lại đang cấm thợ
+> dùng. Tức là app tự bỏ một cái khóa mặt miễn phí, đúng lúc đang đi chữa bệnh trôi mặt.
+
+**LUẬT ÁP DỤNG (giữ chặt):**
+- ✅ **Câu khẳng định vẫn là XƯƠNG SỐNG.** `sharp focus` mạnh hơn `avoid blur`, vì nó nói cho
+  model biết phải làm GÌ, không chỉ né gì. Dùng bảng chuyển đổi dưới trước.
+- ✅ **Thêm 1 cụm `avoid ...` ở CUỐI `constraints`** cho các lỗi động học không có dạng khẳng
+  định tự nhiên: `avoid identity drift, avoid temporal flicker, avoid jitter`. Ba cụm này
+  không diễn được thành câu khẳng định gọn (một khung ảnh tĩnh không "flicker" được).
+- ⛔ **Tối đa ~3 cụm `avoid`.** Nhồi mười thứ cấm làm loãng cả prompt — đúng cơ chế đã hại
+  câu khóa danh tính. Cấm ít mà trúng.
+- ⛔ **Đừng dịch ngược:** đã có `sharp focus` thì ĐỪNG thêm `avoid blur`. Trùng ý = tốn chữ
+  trong ngân sách 60–100 từ.
+
+**Bảng chuyển đổi ý "cấm" → câu khẳng định (dùng TRƯỚC, ưu tiên hơn `avoid`):**
 
 | Ý muốn tránh | Viết POSITIVE thay thế (constraints) |
 |---|---|
@@ -223,9 +422,17 @@ Manual 2.x **không có trường negative** — `--no blur` vô tác dụng. Ch
 | vật thể thừa | `no extra objects, clean composition` |
 | watermark rác | `no watermark` (watermark AI bịa gần như luôn là rác → cấm được) |
 
+**Bảng `avoid` — CHỈ 3 cụm này, chỉ cho VIDEO, đặt ở CUỐI `constraints`:**
+
+| Lỗi động học | Cụm chính thức | Vì sao không viết khẳng định được |
+|---|---|---|
+| Mặt/danh tính trượt dần qua các khung | `avoid identity drift` | "drift" là hiện tượng THEO THỜI GIAN, không có trạng thái tĩnh tương đương |
+| Chi tiết nhấp nháy/đổi giữa các khung | `avoid temporal flicker` | như trên |
+| Máy rung giật ngoài ý muốn | `avoid jitter` | `steady camera` diễn được một phần, nhưng `avoid jitter` trúng hơn khi có động tác máy |
+
 > ⚠️ **KHÔNG cấm cứng `text` / `subtitles` / `lip-sync` / `logos`** — anh có thể MUỐN chúng. Xử lý theo mục 11b (chữ) và 11c (thoại/nói) dưới đây.
 
-> App vẫn GIỮ trường `negative` riêng làm dự phòng (phòng khi Coco đổi sang model có đọc negative như Gemini/Kling). Nhưng với Seedance, **thứ có tác dụng là `constraints`**.
+> App vẫn GIỮ trường `negative` riêng làm dự phòng (phòng khi Coco đổi sang model có đọc trường negative như Gemini/Kling). Với Seedance, thứ có tác dụng là **`constraints`** — cả phần khẳng định lẫn đuôi `avoid`.
 
 ---
 
@@ -290,14 +497,22 @@ Nhân vật xuất hiện & đang nói KHÔNG bắt buộc phải khớp miệng
 | Motion/Camera-move | ❌ không có chuyển động máy/chủ thể | ✅ có |
 | Audio / lip-sync / temporal | ❌ không | ✅ có |
 | Cỡ cảnh / góc máy | ✅ vẫn ghi (bố cục frame) | ✅ |
+| **Thông số máy** (`85mm`, `f/1.4`, ISO, fps) | ⭐ **CÓ — nên ghi.** Hướng dẫn chính thức Seedream dùng thẳng `shot on 85mm lens, f/1.4 aperture` | ⛔ **KHÔNG.** Hướng dẫn chính thức Seedance dặn *"đừng ghi thông số kỹ thuật máy quay"* → thay bằng **động tác máy + từ nhịp** (`slow/smooth/steady/gradual`) |
 | @reference | ✅ multi-image, giữ nhân vật/sản phẩm | ✅ |
-| Negative | ❌ vẫn KHÔNG đọc → constraints positive | ❌ |
-| Độ phân giải | tới **4K** (Seedream 4.0), giữ chi tiết nét | 2K–4K |
+| Ràng buộc "cấm" | không có TRƯỜNG negative → câu khẳng định | không có TRƯỜNG negative, **nhưng có cú pháp `avoid ...` trong prompt** (mục 10) |
+| Ngân sách chữ | 60–100 từ (trần 150) | 60–100 từ (trần 150) |
+| Độ phân giải | tới **4K**, giữ chi tiết nét | 2K–4K |
 
-**Năng lực Seedream 4.0 (định cỡ prompt):**
-- **Multi-reference:** nhận nhiều ảnh tham chiếu cùng lúc để **khóa nhân vật/sản phẩm nhất quán** giữa các khung — nền tảng cho @tag của app.
-- **Image editing / region:** sửa cục bộ 1 vùng ảnh giữ nguyên phần còn lại (Coco xử; app chỉ ra prompt).
-- Prompt ảnh vẫn **câu tự nhiên ≤250 từ**, đặt Subject trước, KHÔNG tag-soup.
+> ⭐ **CHI TIẾT TỪNG ĐỜI MODEL KHÔNG NẰM Ở ĐÂY.** Mục này ghi luật **chung cho mọi đời**.
+> Luật riêng của đời engine dự án đang nhắm nằm ở `skills/models/<id>.md` (Seedream 5.0/4.0,
+> Seedance 2.0/2.5/1.5) và được app nối **SAU** khối này → **hồ sơ model ĐÈ mục này** khi chỏi.
+> Khác biệt lớn nhất cần biết: **5.0 xếp LỚP và ghi FORMAT ĐẦU TIÊN**, còn **4.0 bám công thức
+> 6 phần** như mô tả bên dưới. Đọc `models/seedream-5.md` trước khi viết prompt ảnh.
+
+**Năng lực chung dòng Seedream (định cỡ prompt):**
+- **Multi-reference:** nhận nhiều ảnh tham chiếu cùng lúc (tới 10) để **khóa nhân vật/sản phẩm nhất quán** giữa các khung — nền tảng cho @tag của app.
+- **Image editing / region:** sửa cục bộ 1 vùng ảnh giữ nguyên phần còn lại — 5.0 làm chính xác và **bắt buộc có câu ghim**; 4.0 yếu, muốn đổi thì tả lại cả khung.
+- Prompt ảnh vẫn **câu tự nhiên, 60–100 từ (trần 150)**, KHÔNG tag-soup.
 
 **@reference cho ẢNH (song song mục 8, dùng "as the first frame" đúng ngữ cảnh):**
 - `@Image1's character as the subject` — khóa nhân vật.

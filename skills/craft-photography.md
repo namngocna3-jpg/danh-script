@@ -90,7 +90,62 @@ Ngoài trời rộng → thiên quang, khí quyển tạo lớp xa. Trong nhà (
 
 ---
 
-## 5 · CHẤT LIỆU VẬT LÝ (độ chân thực — KHÔNG phải chất liệu render)
+## 5 · ỐNG KÍNH & CỠ CẢNH — ⚠️ CHỈ CHO PROMPT **ẢNH** (Seedream) ⭐
+
+> ⛔ **RANH GIỚI CỨNG — đọc trước khi dùng bảng dưới.**
+> Mục này áp cho **prompt ẢNH (GATE 2 · Seedream)**. **KHÔNG áp cho prompt VIDEO (GATE 3 ·
+> Seedance).**
+>
+> Lý do không phải là gu, mà là **hai engine đọc khác nhau**, theo tài liệu chính thức:
+> * **Seedream (ảnh)** — hướng dẫn chính thức ghi thẳng thông số máy vào prompt là ĐÚNG:
+>   `shot on 85mm lens, f/1.4 aperture, shallow depth of field`. Engine hiểu và dựng đúng.
+> * **Seedance (video)** — hướng dẫn chính thức dặn **"đừng ghi thông số kỹ thuật máy quay"**
+>   và nêu đích danh `focal length 85mm`, `f/2.8`, `ISO 800`, `24fps` là ví dụ KHÔNG nên viết.
+>   Với video, cái engine đọc là **động tác máy + từ nhịp** (`slow`, `smooth`, `stable`,
+>   `gradual`, `gentle`) — xem `_execution_vidPrompter.md` mục 4.
+>
+> Nhồi tiêu cự vào prompt video không giúp gì, mà còn **chiếm ngân sách chữ** của thứ thật sự
+> có tác dụng (Seedance nhắm 60–100 từ). Đây là chữ vô ích đẩy chữ hữu ích ra ngoài.
+>
+> Vì sao mục này vẫn cần cho ẢNH: ô `[CAMERA]` của prompt ảnh mà không có bảng thì thợ gõ bừa
+> "cinematic shot" — vô nghĩa với engine. Tiêu cự quyết định **méo mặt hay không** và **nền
+> tan hay còn đọc được**, tức ảnh hưởng thẳng tới nhất quán nhân vật, không chỉ thẩm mỹ.
+
+| Tiêu cự | Cỡ cảnh hợp | Hiệu ứng vật lý | Dùng khi | Từ khóa prompt (EN) |
+|---|---|---|---|---|
+| **24–28mm** | wide / establishing | phối cảnh cường điệu, rìa khung kéo giãn | mở không gian, tốc độ, năng lượng, POV cầm tay | `24mm wide angle, deep focus` |
+| **35mm** | wide-medium | gần mắt người, còn đọc được bối cảnh | thiết lập, nhân vật NHỎ trong khung (cô đơn), b-roll đời sống | `35mm, natural perspective` |
+| **50mm** | medium | phối cảnh trung tính, DoF vừa | hội thoại, nhịp chính, "như người đối diện" | `50mm, medium shot, soft background separation` |
+| **85mm** | medium-close / close-up | **nén nhẹ → mặt đẹp nhất**, nền tan mượt | cảm xúc, chân dung, cận mắt | `85mm portrait lens, shallow depth of field` |
+| **100mm macro** | extreme close-up | cô lập chi tiết, bokeh tròn sạch | mắt · tay · giọt nước · texture sản phẩm | `100mm macro, extreme close-up, creamy bokeh` |
+
+### Luật ống kính (giữ chặt)
+
+1. **CẤM <28mm cho cận mặt.** Góc rộng ở khoảng cách gần làm **phình mũi, hẹp tai** — mặt
+   biến dạng so với ảnh tư liệu = **trôi mặt do quang học**, dù `@tag` và anchor đều đúng.
+   Rộng thì để cho toàn cảnh/bối cảnh, không để cho khuôn mặt.
+2. **Càng cận → tiêu cự càng dài.** wide 24–35 · medium 50 · close 85 · macro 100. Ghi
+   "close-up, 24mm" là mâu thuẫn tự thân, engine chọn bừa một vế.
+3. **Một cảnh một tiêu cự.** Đổi tiêu cự = đổi cut. Nhồi 2 tiêu cự vào 1 prompt liền mạch
+   thì model nội suy ra một cái ở giữa, không giống cái nào.
+4. **Ưu tiên dolly vật lý hơn zoom.** `dolly-in` giữ nguyên phối cảnh (mặt không đổi hình);
+   `zoom in` đổi tiêu cự giữa chừng → tỉ lệ ngũ quan trượt trong cùng một cú máy.
+   ↳ Đây là luật DUY NHẤT ở mục 5 **cũng đúng cho video** — nhưng bên video diễn đạt bằng
+   TÊN ĐỘNG TÁC (`dolly in` thay vì `zoom in`), không kèm số mm.
+5. **Tiêu cự phục tùng gu đạo diễn.** Gu đã chốt "ống kính dài, nén nền" thì đừng chen
+   24mm cho hoành tráng — nhất quán thắng ấn tượng lẻ.
+
+> Nhân vật đã có **ảnh tư liệu**: prompt ẢNH vẫn ghi tiêu cự (nó là thông tin QUANG HỌC,
+> không phải mô tả ngoại hình) — không xung đột với ảnh, còn giúp ảnh được tái dựng đúng
+> góc nhìn.
+>
+> **Chuyển sang video thế nào:** cỡ cảnh giữ nguyên (`close-up`, `medium shot`,
+> `wide establishing shot` — đây là ngôn ngữ điện ảnh, engine video đọc tốt), chỉ **bỏ con
+> số mm**. `85mm portrait lens, shallow depth of field` → `close-up, shallow depth of field`.
+
+---
+
+## 6 · CHẤT LIỆU VẬT LÝ (độ chân thực — KHÔNG phải chất liệu render)
 
 Da: lỗ chân lông thấy được, không quá mài mịn, không phóng đại tì vết (`pore-level skin, not over-smoothed`). Tóc: sợi rõ (`hair strands rendered fine`). Vật liệu: vải/kim loại/gỗ/ngọc có ánh và vân đúng vật lý (`realistic fabric drape, metal reflection, wood grain`). Cấm cảm giác "nhựa/CG giả" trừ khi STYLE chủ đích như vậy (VD clay/3D).
 
@@ -98,7 +153,7 @@ Da: lỗ chân lông thấy được, không quá mài mịn, không phóng đ�
 
 ---
 
-## 6 · CẤM (thuộc mảnh kỹ thuật này)
+## 7 · CẤM (thuộc mảnh kỹ thuật này)
 - ❌ Không điền thời đại/trang phục cụ thể — luôn `{wardrobe from scene context}`.
 - ❌ Không ghi chất liệu render (anime/photoreal/3D) — đó là STYLE.
 - ❌ Không tự thêm đạo cụ/nhân vật ngoài ideal.

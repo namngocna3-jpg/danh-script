@@ -61,6 +61,9 @@ export function ExportPanel({ projectId }: { projectId: number }): JSX.Element {
     )
   }
 
+  // Tổng thời lượng ước tính — cộng số giây các block đã có shot_panel.
+  const totalDuration = bundle.blocks.reduce((sum, b) => sum + (b.duration_sec ?? 0), 0)
+
   return (
     <div className="flex flex-col gap-5">
       <div>
@@ -143,6 +146,46 @@ export function ExportPanel({ projectId }: { projectId: number }): JSX.Element {
         </div>
       )}
 
+      {/* ⭐ BẢNG LÀM VIỆC — mô tả shot + số giây của mọi block trên MỘT màn hình.
+          Trước đây phải cuộn qua từng thẻ prompt mới biết block nào dài bao nhiêu. */}
+      {bundle.blocks.length > 0 && (
+        <div className="card p-4">
+          <div className="mb-3 flex items-baseline justify-between">
+            <h3 className="text-sm font-semibold text-slate-200">🎬 Bảng shot</h3>
+            <span className="text-xs text-slate-500">
+              {bundle.blocks.length} block
+              {totalDuration > 0 && ` · tổng ~${totalDuration}s`}
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-ink-800 text-slate-500">
+                  <th className="py-2 pr-4 font-medium">Block</th>
+                  <th className="py-2 pr-4 font-medium">Giây</th>
+                  <th className="py-2 pr-4 font-medium">Mô tả shot</th>
+                  <th className="py-2 font-medium">Lời thoại</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bundle.blocks.map((b, i) => (
+                  <tr key={i} className="border-b border-ink-900/60 align-top">
+                    <td className="whitespace-nowrap py-2 pr-4 font-semibold text-amber-soft">
+                      {b.scene_order}.{b.block_order}
+                    </td>
+                    <td className="whitespace-nowrap py-2 pr-4 text-blue-300">
+                      {b.duration_sec != null ? `${b.duration_sec}s` : '—'}
+                    </td>
+                    <td className="py-2 pr-4 text-slate-300">{b.shot_desc || '—'}</td>
+                    <td className="py-2 text-slate-500">{b.narration_vi || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Khối prompt từng block */}
       <div className="flex flex-col gap-3">
         {bundle.blocks.map((b, i) => (
@@ -150,6 +193,8 @@ export function ExportPanel({ projectId }: { projectId: number }): JSX.Element {
             key={i}
             sceneOrder={b.scene_order}
             blockOrder={b.block_order}
+            shotDesc={b.shot_desc}
+            durationSec={b.duration_sec}
             narration={b.narration_vi}
             imagePrompt={b.image_prompt_en}
             videoPrompt={b.video_prompt}
@@ -164,6 +209,8 @@ export function ExportPanel({ projectId }: { projectId: number }): JSX.Element {
 function BlockCard({
   sceneOrder,
   blockOrder,
+  shotDesc,
+  durationSec,
   narration,
   imagePrompt,
   videoPrompt,
@@ -171,6 +218,8 @@ function BlockCard({
 }: {
   sceneOrder: number
   blockOrder: number
+  shotDesc: string
+  durationSec: number | null
   narration: string
   imagePrompt: string
   videoPrompt: VideoPrompt | null
@@ -185,10 +234,21 @@ function BlockCard({
         <span className="chip border-amber-glow/30 text-amber-soft">
           Cảnh {sceneOrder}.{blockOrder}
         </span>
+        {/* ⭐ Số giây — cần để canh dựng ở CapCut, trước đây không hiện ở đâu trong bản xuất. */}
+        {durationSec != null && (
+          <span className="chip border-blue-400/30 text-blue-300">{durationSec}s</span>
+        )}
         {narration && (
           <span className="line-clamp-1 text-xs text-slate-500">🎙 {narration}</span>
         )}
       </div>
+
+      {/* ⭐ Mô tả shot tiếng Việt — biết block tả gì mà không phải dịch prompt tiếng Anh. */}
+      {shotDesc && (
+        <p className="mb-3 rounded-lg border border-ink-800 bg-ink-950/40 px-3 py-2 text-xs leading-relaxed text-slate-400">
+          <span className="font-medium text-slate-300">🎬 Shot:</span> {shotDesc}
+        </p>
+      )}
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <PromptBox label="Prompt ẢNH" text={imagePrompt} copyLabel="Copy ảnh" />
@@ -315,7 +375,26 @@ function bundleToMarkdown(bundle: ExportBundle): string {
   L.push('')
   L.push(`- **Style:** ${bundle.styleId ?? '—'}`)
   L.push(`- **Số block:** ${bundle.blocks.length}`)
+  const totalSec = bundle.blocks.reduce((s, b) => s + (b.duration_sec ?? 0), 0)
+  if (totalSec > 0) L.push(`- **Tổng thời lượng:** ~${totalSec}s`)
   L.push('')
+
+  // ⭐ BẢNG SHOT ngay đầu file: mô tả + số giây từng block, dán thẳng vào Sheet/Docs
+  //    để làm bảng dựng mà không phải tự bóc từ các khối prompt bên dưới.
+  if (bundle.blocks.length) {
+    L.push('## Bảng shot')
+    L.push('')
+    L.push('| Block | Giây | Mô tả shot | Lời thoại |')
+    L.push('|---|---|---|---|')
+    for (const b of bundle.blocks) {
+      // Ký tự `|` trong nội dung sẽ phá cột của bảng Markdown → thoát trước.
+      const esc = (s: string): string => s.replace(/\|/g, '\\|').replace(/\n+/g, ' ')
+      L.push(
+        `| ${b.scene_order}.${b.block_order} | ${b.duration_sec != null ? `${b.duration_sec}s` : '—'} | ${esc(b.shot_desc) || '—'} | ${esc(b.narration_vi) || '—'} |`
+      )
+    }
+    L.push('')
+  }
 
   if (bundle.stylePrefix?.trim()) {
     L.push('## Style Prefix — dán vào đầu MỌI prompt')
@@ -435,7 +514,13 @@ function bundleToMarkdown(bundle: ExportBundle): string {
   L.push('## Prompt từng block')
   L.push('')
   for (const b of bundle.blocks) {
-    L.push(`### Cảnh ${b.scene_order}.${b.block_order}`)
+    // ⭐ Tiêu đề kèm SỐ GIÂY để canh dựng ở CapCut mà không phải mở lại app.
+    L.push(
+      `### Cảnh ${b.scene_order}.${b.block_order}${b.duration_sec ? ` — ${b.duration_sec}s` : ''}`
+    )
+    // ⭐ Mô tả shot (tiếng Việt) đặt NGAY dưới tiêu đề: biết block tả gì mà không phải
+    //    đọc prompt tiếng Anh bên dưới.
+    if (b.shot_desc) L.push(`🎬 **Shot:** ${b.shot_desc}`)
     if (b.narration_vi) L.push(`> 🎙 ${b.narration_vi}`)
     L.push('')
     L.push('**Prompt ẢNH:**')
